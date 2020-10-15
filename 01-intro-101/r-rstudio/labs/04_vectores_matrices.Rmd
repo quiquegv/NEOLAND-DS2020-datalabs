@@ -34,6 +34,7 @@ vector_logico <- c(TRUE, FALSE)
 ```
 
 ```{r eval=FALSE}
+
 vector_numerico <- c(1, 10, 49)
 vector_caracter <- c("a", "b", "c")
 # Completa el código para vector_logico

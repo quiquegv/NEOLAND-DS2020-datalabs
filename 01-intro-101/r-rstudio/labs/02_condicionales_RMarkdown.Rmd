@@ -41,7 +41,7 @@ if (x < 0){
 ```{r}
 # Sentencias condionales 2
 
-y <- 5
+y <- 5if
 if(y < 0){
   sprintf("%d es un numero negativo", y)
 } else if (y == 0){

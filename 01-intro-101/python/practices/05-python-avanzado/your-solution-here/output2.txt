@@ -1,0 +1,22 @@
+Dia, Afectados, Cŕiticos, Exitus, Estado
+1, 4250, 425, 106, No Saturación
+2, 5738, 574, 143, No Saturación
+3, 7746, 775, 194, No Saturación
+4, 10457, 1046, 261, No Saturación
+5, 14116, 1412, 353, No Saturación
+6, 19057, 1906, 476, No Saturación
+7, 25727, 2573, 643, No Saturación
+8, 34732, 3473, 868, Saturación
+9, 46888, 4689, 1172, Saturación
+10, 63298, 6330, 1582, Saturación
+11, 85453, 8545, 2136, Saturación
+12, 115361, 11536, 2884, Saturación
+13, 155738, 15574, 3893, Saturación
+14, 210246, 21025, 5256, Saturación
+15, 283832, 28383, 7096, Saturación
+16, 383173, 38317, 9579, Saturación
+17, 517284, 51728, 12932, Saturación
+18, 698334, 69833, 17458, Saturación
+19, 942750, 94275, 23569, Saturación
+20, 1272713, 127271, 31818, Saturación
+21, 1718163, 171816, 42954, Saturación
