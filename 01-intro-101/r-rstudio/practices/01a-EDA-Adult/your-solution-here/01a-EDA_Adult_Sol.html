@@ -1,0 +1,214 @@
+---
+title: "08_EDA_AdultCensus"
+author: "nombre - apellido - Bootcamp NEOLAND"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document: 
+    highlight: tango
+    theme: spacelab
+    toc: yes
+---
+
+Basado en la última práctica EDA Titanic en R Studio (el fichero original así como el fichero HTML se encuentra en Google Drive), deben realizar una EDA completo para este dataset:
+
+https://archive.ics.uci.edu/ml/datasets/adult
+
+**IMPORTANTE**:
+Los pasos a realizar son:
+- [ ] exploración
+- [ ] limpieza
+- [ ] discretización
+
+
+Intentar crear el output de salida en formato HTML (buscar info de `knit` y sus dependencias)
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Cargamos el juego de datos
+datosAdult <- read.csv('http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',stringsAsFactors = FALSE, header = FALSE)
+
+# Nombres de los atributos
+names(datosAdult) <- c("age","workclass","fnlwgt","education","education-num","marital-status","occupation","relationship","race","sex","capital-gain","capital-loss","hour-per-week","native-country","income")
+```
+
+```{r}
+unique(datosAdult$education)
+unique(datosAdult$`education-num`)
+```
+
+
+
+
+```{r}
+library(dplyr)
+filas= nrow(datosAdult)
+E18=c(" Preschool"," 1st-4th"," 5th-6th"," 7th-8th"," 9th"," 10th" ," 11th"," 12th")
+E912=c(" HS-grad"," Some-college"," Assoc-acdm"," Assoc-voc", "E912")
+E1316=c(" Bachelors"," Masters" ," Prof-school"," Doctorate")
+for (i in filas){ # no cambia las filas porque tiene que se de 1:filas. Lo dejo así. Luego he modificado el DF para aplicar esta categorización. 
+if (datosAdult$education[i] %in% E18){
+  datosAdult$education[i]= "E18"
+} else if(datosAdult$education[i] %in% E912){
+  datosAdult$education[i]= "E912"
+} else if (datosAdult$education[i] %in% E1316){
+  datosAdult$education[i]= "E1316"
+}
+}
+table(datosAdult$education)
+```
+
+## Exploración de los datos
+
+
+```{r}
+# Revisión de los tipos de datos y el numero de observaciones en cada uno: 
+str(datosAdult)
+
+# ninguna de las variables está factorizada
+```
+
+```{r}
+summary(datosAdult) # resumen de las variables que hay
+colSums(is.na(datosAdult)) # comprobamos si hay nulos
+
+```
+```{r}
+colSums(datosAdult == "") # revisamos si hay datos vacios
+```
+```{r}
+# Comprobar los valores de cada variable, para ver si hay que elimnar alguna. Usamos Table para ver los pesos de cada variable
+table(datosAdult$workclass)
+table(datosAdult$education)
+table(datosAdult$'marital-status')
+table(datosAdult$occupation)
+table(datosAdult$relationship)
+table(datosAdult$race)
+table(datosAdult$sex)
+table(datosAdult$'hour-per-week')
+table(datosAdult$'native-country')
+table(datosAdult$income)
+```
+```{r}
+# estas variables tiene datos sin completar, aparecen con el simbolo ?. Vamos a ver como podemos modificar ese dato.
+# compobamos el peso relativo de ese valor 
+round(prop.table(table(datosAdult$workclass)), 4)
+round(prop.table(table(datosAdult$occupation)), 4)
+round(prop.table(table(datosAdult$`native-country`)), 4)
+# no hay una determinación clara de estas variables para sustiruirlos. Aún asi voy a sustituir  en workclass el valor ? por "Private" que es el que tiene una mayor representación y en "native-country" por "United-Sates"
+```
+
+```{r}
+# Cambio de valores :
+datosAdult$workclass[workclass == " ?"] = " Private"
+datosAdult$`native-country`[`native-country` == " ?"] = " United-States"
+
+table(datosAdult$workclass)
+round(prop.table(table(datosAdult$workclass)), 4)
+table(datosAdult$`native-country`)
+round(prop.table(table(datosAdult$`native-country`)), 4)
+
+```
+
+```{r}
+# Antes de hacer modificaciones hago una copia del df
+datosAdultBkup <- datosAdult
+```
+
+
+```{r}
+# Voy a factorizar las variables más importantes que tienen pocos valores únicos. 
+attach(datosAdult)
+apply(datosAdult, MARGIN = 2, FUN = function(x) length (unique(x)))
+
+```
+```{r}
+# Podemos discretizar la Edad (si le ponemos rangos de edad),education (si la agrupamos), Workclass, marital status, Relationship, race, sex e income. 
+library(dplyr)
+
+# Empezamos por la edad, hago 4 categorias 17-30, 31-45, 46-60 y más de 60
+datosAdult <- datosAdult %>% mutate(Edades = if_else (age>60,"> 60",
+                                        ifelse(age>46,"Entre 45-60",
+                                        ifelse(age>30,"30-45",
+                                        "17-30"))))
+                                        
+
+datosAdult %>% group_by(Edades) %>% count()
+```
+
+
+```{r}
+# Modifico la variuable de educación
+datosAdult <- datosAdult %>% mutate(Educacion = if_else (education %in% E18,"E18",
+                                        ifelse(education %in% E912,"E912",(
+                                               ifelse(education %in% E1316,"E1316", "Nada"
+                                        )))))
+
+
+datosAdult %>% group_by(Educacion) %>% count()
+table(datosAdult$education)
+```
+
+```{r}
+apply(datosAdult, MARGIN = 2, FUN = function(x) length (unique(x)))
+```
+
+
+```{r}
+# Creadas las categorias y agrupaciones, voy a hacer la factoriazión de las variables indicadas antes. 
+cols <- c("Educacion",
+          "Edades",
+          "workclass",
+          "marital-status",
+          "relationship",
+          "sex",
+          "race",
+          "income")
+for (i in cols){
+  datosAdult[,i] = as.factor(datosAdult[,i])
+}
+
+str(datosAdult)
+
+```
+# Finalmente Voy a representar las siguientes relaciones con gráficos: Edades - Tipo de trabajo, Edades - Salarios, Educación - Tipos de trabajos y educación - Salarios
+```{r}
+# Edades y tipos de trabajo
+ggplot(data=datosAdult[1:filas,],
+       aes(
+         x = Edades,
+         fill = workclass
+         )
+       ) + geom_bar()
+
+
+```
+```{r}
+
+# Edades y salarios
+ggplot(data=datosAdult[1:filas,],
+       aes(
+         x = income,
+         fill = Edades
+         )
+       ) + geom_bar()
+
+```
+```{r}
+#Educacion y tipos de trabajos
+ggplot(data=datosAdult[1:filas,],
+       aes(
+         x = Educacion,
+         fill = workclass
+         )
+       ) + geom_bar()
+```
+```{r}
+#Educacion y salarios
+ggplot(data=datosAdult[1:filas,],
+       aes(
+         x = Educacion,
+         fill = income,
+         )
+       ) + geom_bar(position = "fill")
+```
+
+
