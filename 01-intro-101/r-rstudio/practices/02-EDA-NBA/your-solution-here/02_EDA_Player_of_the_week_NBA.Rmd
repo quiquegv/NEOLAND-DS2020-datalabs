@@ -313,18 +313,22 @@ sort(table(nba$Team), decreasing = TRUE)[1:5]
 ## 5.1 Crear una base datos denominada nba.unique en la que no se repita el nombre de ningún jugador.Trabajar a partir de ahora con esta base de datos.
 ```{r}
 
+nba.unique <- nba %>% distinct(Player, .keep_all = TRUE) # uso la funcion distinct con keep_all = True para que mantenga el ersto de variables. Ha cogido la primera aparición de cada valor. 
 ```
 
 
 ## 5.2 Listar el nombre de los 10 jugadores más bajos que han sido nombrados alguna vez jugadores de la semana. No debe repetirse ningún nombre.
 ```{r}
-
-nba.unique <- nba %>% distinct(Player, .keep_all = TRUE) # uso la funcion distinct con keep_all = True para que mantenga el ersto de variables. Ha cogido la primera aparición de cada valor. 
+nba.unique$Player <- as.character(nba.unique$Player)
+top10_jugadores_bajos <- nba.unique[order(nba.unique$Height)[1:10],5:6] # uso la función order para que me ordene height de menor a mayor y me cree un nuevo DF con las 10 primeras filas y las columnas 5 (altura) y 6 (jugador)
+top10_jugadores_bajos
 ```
 
 
 ## 5.3 Listar el nombre de los 10 jugadores más altos que han sido nombrados y mostrar su altura. No debe repetirse ningún nombre.
 ```{r}
+top10_jugadores_altos <- nba.unique[order(nba.unique$Height, decreasing = TRUE)[1:10],5:6]# uso la función order para que me ordene height de mayor a menor y me cree un nuevo DF con las 10 primeras filas y las columnas 5 (altura) y 6 (jugador)
+top10_jugadores_altos                                     
 
 ```
 
@@ -333,11 +337,18 @@ nba.unique <- nba %>% distinct(Player, .keep_all = TRUE) # uso la funcion distin
 ## 6.1 Eliminar los outliers de la variable peso (Weight) y guardar en un data frame nba.avg
 ```{r}
 
+boxplot(nba.unique$Weight) # Observo en el Boxplot que hay dos valores fuera de los cuartiles. 
+table(nba.unique$Weight) # veo en que los mayores valores son 310 y 325. Son los que voy a eliminar. 
+
+nba.avg <- nba.unique[nba.unique$Weight < 308, ] # genero el nuevo DF con un filtro que elimne todas las filas con un valor de Weight mayor que 300. 
+
 ```
 
 
 ## 6.2 Comparar los boxplots de los datos originales en nba.unique y de los datos del peso de nba.avg
 ```{r}
+boxplot(nba.unique$Weight)
+boxplot(nba.avg$Weight)
 
 ```
 
@@ -345,7 +356,8 @@ nba.unique <- nba %>% distinct(Player, .keep_all = TRUE) # uso la funcion distin
 
 ## 6.3 Interpretar los resultados
 ```{r}
-
+summary(nba.unique$Weight)
+summary(nba.avg$Weight)
 ```
 
 Con la eliminación de los outliers con índice a 150 y 272, con los pesos respetivos 300 y 500, se han reducido el numero de elementos en el segundo dataframe nba.avg. Los elementos se han reducido de 274 a 272
@@ -364,7 +376,24 @@ Además con el summary se pueden observar los siguientes cambios:
 - alto: los 50 jugadores más altos
 - normal: el resto de jugadores
 ```{r}
-
+top50_jugadores_bajos <- nba.unique[order(nba.unique$Height)[1:50],6]
+top50_jugadores_Altos<- nba.unique[order(nba.unique$Height, decreasing = TRUE)[1:50],6]
+nba_pruebas <- nba
+for (i in 1:nrow(nba)){
+  if (nba$Player[i] %in% top50_jugadores_Altos){
+    nba$Altura[i] = "alto"
+  } else if (nba$Player[i] %in% top50_jugadores_bajos){
+    nba$Altura[i] = "bajo"
+  } else {nba$Altura[i] = "normal"}
+}
+for (i in 1:nrow(nba.unique)){
+  if (nba.unique$Player[i] %in% top50_jugadores_Altos){
+    nba.unique$Altura[i] = "alto"
+  } else if (nba.unique$Player[i] %in% top50_jugadores_bajos){
+    nba.unique$Altura[i] = "bajo"
+  } else {nba.unique$Altura[i] = "normal"}
+}
+nba_backup <- nba
 ```
 
 
@@ -374,19 +403,43 @@ Además con el summary se pueden observar los siguientes cambios:
 - alto: los 50 jugadores con mayor peso
 - normal: el resto de jugadores
 ```{r}
+top50_jugadores_delgados <- nba.unique[order(nba.unique$Weight)[1:50],6]
+top50_jugadores_gordos<- nba.unique[order(nba.unique$Weight, decreasing = TRUE)[1:50],6]
 
+for (i in 1:nrow(nba)){
+  if (nba$Player[i] %in% top50_jugadores_gordos){
+    nba$Peso[i] = "alto"
+  } else if (nba$Player[i] %in% top50_jugadores_delgados){
+    nba$Peso[i] = "bajo"
+  } else {nba$Peso[i] = "normal"}
+}
+for (i in 1:nrow(nba.unique)){
+  if (nba.unique$Player[i] %in% top50_jugadores_gordos){
+    nba.unique$Peso[i] = "alto"
+  } else if (nba.unique$Player[i] %in% top50_jugadores_delgados){
+    nba.unique$Peso[i] = "bajo"
+  } else {nba.unique$Peso[i] = "normal"}
+}
 ```
 
 
 
 ## 7.3 Calcular la media y desviación típica del peso (Weight) según la clasificación de altura de los jugadores.
 ```{r}
-
+nba.unique %>% group_by(Altura) %>% summarise(mean(Weight))
+nba.unique %>% group_by(Altura) %>% summarise(sd(Weight))
 ```
 
 
 ## 7.4 Realizar un boxplot del peso (Weight) según la clasificación de altura del jugador. Los boxplots deben estar ordenados de menos a mayor altura.
 ```{r}
+nba.unique_pruebas <- nba.unique
+
+
+nba.unique$Altura <- factor(nba.unique$Altura, levels = levels(nba.unique$Altura)[c(2,3,1)] )
+is.factor(nba.unique$Altura)
+
+boxplot(nba.unique$Weight ~ nba.unique$Altura)
 
 ```
 
@@ -394,6 +447,9 @@ Además con el summary se pueden observar los siguientes cambios:
 ## 7.5 Hacer un listado con el nombre de jugadores que tienen una altura ‘normal’ y un peso ‘alto’. Ordenar alfabéticamente por nombre.
 ```{r}
 
+jugadores_alturanormal_pesoalto <- nba.unique[nba.unique$Altura == "normal" & nba.unique$Peso == "alto",6 ]
+
+jugadores_alturanormal_pesoalto 
 ```
 
 

@@ -98,8 +98,8 @@ round(prop.table(table(datosAdult$`native-country`)), 4)
 
 ```{r}
 # Cambio de valores :
-datosAdult$workclass[workclass == " ?"] = " Private"
-datosAdult$`native-country`[`native-country` == " ?"] = " United-States"
+datosAdult$workclass[datosAdult$workclass == " ?"] = " Private"
+datosAdult$`native-country`[datosAdult$`native-country` == " ?"] = " United-States"
 
 table(datosAdult$workclass)
 round(prop.table(table(datosAdult$workclass)), 4)
