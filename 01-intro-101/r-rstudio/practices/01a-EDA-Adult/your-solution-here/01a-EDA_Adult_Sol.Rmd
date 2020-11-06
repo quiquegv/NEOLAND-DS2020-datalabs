@@ -101,11 +101,29 @@ round(prop.table(table(datosAdult$`native-country`)), 4)
 datosAdult$workclass[datosAdult$workclass == " ?"] = " Private"
 datosAdult$`native-country`[datosAdult$`native-country` == " ?"] = " United-States"
 
+# Cambio de valores de la variable Occupation que está muy distribuida. Este metodo lo hicimos con Daniel. 
+library(dplyr)
+datosAdult1 <- datosAdult %>%
+                      mutate(occupation=ifelse(occupation==" ?",NA,occupation)) # Creamos un nuevo Df que sustituya en la variable ocupation los valores "?" por NA 
+perdidos <- is.na(datosAdult1$occupation) # Creamos una nueva variable con los valores NA
+n.perdidos <- sum(is.na(datosAdult1$occupation)) # Los sumamos, para ver cuantos son y saber cuantos valores tenemos que sustituir en el DT
+datosAdult2 <- datosAdult1 %>% filter(!is.na(occupation)) # en este DF cogemos los que no tienen NA para extraer los valores unicos de la variable ocupation
+
+datosAdult1[perdidos,"occupation"] <- sample(unique(datosAdult2$occupation),n.perdidos,replace = T) # Con esto sustituimos los valores NA pero no le damos proporcionalidad a la sustitución. Lo hace de forma Normal. 
+
+proporciones <- c(round(prop.table(table(datosAdult2$occupation)), 4))
+datosAdult3 <- datosAdult %>%
+                      mutate(occupation=ifelse(occupation==" ?",NA,occupation)) 
+datosAdult3[perdidos,"occupation"] <- sample(unique(datosAdult2$occupation),n.perdidos,replace = T, prob = proporciones) # Si le añadimos probabilidad lo sustituye proporcionalmente. 
+
+round(prop.table(table(datosAdult$occupation)), 4)
+table(datosAdult$occupation)
+table(datosAdult1$occupation)
+table(datosAdult3$occupation)
 table(datosAdult$workclass)
 round(prop.table(table(datosAdult$workclass)), 4)
 table(datosAdult$`native-country`)
 round(prop.table(table(datosAdult$`native-country`)), 4)
-
 ```
 
 ```{r}

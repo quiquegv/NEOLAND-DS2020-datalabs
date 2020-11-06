@@ -76,13 +76,25 @@ También hay columnas con datos vacios.
 
 ### tipo de dato con class()
 ```{r}
-class(nba)
-
+class(nba) # Uso la función Class para cad auna de las variables
+class(nba$Age)
+class(nba$Conference)
+class(nba$Date)
+class(nba$Draft.Year)
+class(nba$Height)
+class(nba$Player)
+class(nba$Position)
+class(nba$Season)
+class(nba$Season.short)
+class(nba$Seasons.in.league)
+class(nba$Team)
+class(nba$Weight)
+class(nba$Real_value)
 ```
 
 ### tipo de estructura
 ```{r}
-str(nba)
+str(nba) # Vemos el total de variables y observaciones, además del tipo de dato de cada variable y si está organizado por niveles. 
 ```
 
 ### head() es resumen de los 6 primeros resultados
@@ -138,7 +150,7 @@ table(conf)
 
 ## 3.2 Transformar los datos de Conference en variable categórica y mostrar la tabla de frecuencia.
 ```{r}
-nba$Conference <- as.factor(nba$Conference)
+nba$Conference <- as.factor(nba$Conference) # usamos la función as.factor
 table(nba$Conference)
 ```
 
@@ -152,13 +164,13 @@ sum(nba$Conference == "") # Otra forma alternativa de hacerlo es así
 ## 3.4 Transformar las variables Height, Player, Position, Season, Team y Weight en variables categóricas.
 ```{r}
 # Al ser diferentes valores, ejecuto la orden con un for. 
-cols <- c("Height", 
+cols <- c("Height", # creo un vector con el nombre de las columnas
           "Player",
           "Position",
           "Season",
           "Team",
           "Weight")
-for (i in cols){
+for (i in cols){ #asigno con el for para cada columna dentro del vector cols me lo transforme en factor., 
   nba[,i] = as.factor(nba[,i])
 }
 ```
@@ -179,13 +191,13 @@ levels(nba$Weight)
 
 ## 3.6 Calcular el número de anyos que pasan entre que salio el jugador elegido en el draft y la temporada en la que fue jugador de la semana. Denomina la variable tiempo.
 ```{r}
-nba$tiempo <- nba$Season.short - nba$Draft.Year
+nba$tiempo <- nba$Season.short - nba$Draft.Year # directamente creo una columna nueva llamada tiempo que sea la diferencia entre season.short(año del premio a jug de la semana) y el draft.year (año del draft)
 ```
 
 
 ## 3.7 ¿Cual es el número de años que más veces se repite entre que salen elegidos en el draft y se proclaman mejores jugadores? (moda de la variable tiempo)
 ```{r}
-table(nba$tiempo)
+table(nba$tiempo) 
 # el valor más repetido es 7, por tanto la moda es 7 años.
 ```
 
@@ -304,7 +316,7 @@ length(unique(nba$Team))
 
 ## 4.4 ¿Cuáles son los cinco equipos que más veces han sido nombrados sus jugadores como jugador de la semana?
 ```{r}
-sort(table(nba$Team), decreasing = TRUE)[1:5]
+sort(table(nba$Team), decreasing = TRUE)[1:5] # ordeno con sort y le digo que me muestre solo los valores de 1 a 5. 
 ```
 
 
@@ -376,10 +388,10 @@ Además con el summary se pueden observar los siguientes cambios:
 - alto: los 50 jugadores más altos
 - normal: el resto de jugadores
 ```{r}
-top50_jugadores_bajos <- nba.unique[order(nba.unique$Height)[1:50],6]
+top50_jugadores_bajos <- nba.unique[order(nba.unique$Height)[1:50],6] # creo un vector con los jugadores más bajos usando order de la varibale height y que guarde la columna 6 que es el nombre de los jugadores. 
 top50_jugadores_Altos<- nba.unique[order(nba.unique$Height, decreasing = TRUE)[1:50],6]
 nba_pruebas <- nba
-for (i in 1:nrow(nba)){
+for (i in 1:nrow(nba)){ # el for se ejecuta en todas las filas y lo que hace es comprobar si el nombre del jugador de esa fila está en las listas top50_jugadores_Altos y top50_jugadores_bajos para asignar eso a la nueva variable altura. 
   if (nba$Player[i] %in% top50_jugadores_Altos){
     nba$Altura[i] = "alto"
   } else if (nba$Player[i] %in% top50_jugadores_bajos){
@@ -405,7 +417,7 @@ nba_backup <- nba
 ```{r}
 top50_jugadores_delgados <- nba.unique[order(nba.unique$Weight)[1:50],6]
 top50_jugadores_gordos<- nba.unique[order(nba.unique$Weight, decreasing = TRUE)[1:50],6]
-
+# aquí eh hecho lo mismo que en el anterior pero con la variable Weight
 for (i in 1:nrow(nba)){
   if (nba$Player[i] %in% top50_jugadores_gordos){
     nba$Peso[i] = "alto"
@@ -426,20 +438,22 @@ for (i in 1:nrow(nba.unique)){
 
 ## 7.3 Calcular la media y desviación típica del peso (Weight) según la clasificación de altura de los jugadores.
 ```{r}
-nba.unique %>% group_by(Altura) %>% summarise(mean(Weight))
+nba.unique %>% group_by(Altura) %>% summarise(mean(Weight)) # hago un sumarise de la media para que coja la media de toda la variable weight y lo agrupe por altura.
 nba.unique %>% group_by(Altura) %>% summarise(sd(Weight))
 ```
 
 
 ## 7.4 Realizar un boxplot del peso (Weight) según la clasificación de altura del jugador. Los boxplots deben estar ordenados de menos a mayor altura.
 ```{r}
+# el reto en este ejercio ha sido ordenar de menor a mayor altura el boxplot. 
 nba.unique_pruebas <- nba.unique
-
-
-nba.unique$Altura <- factor(nba.unique$Altura, levels = levels(nba.unique$Altura)[c(2,3,1)] )
+nba.unique$Altura <- as.factor(nba.unique$Altura) #convierto altura en factor
 is.factor(nba.unique$Altura)
-
-boxplot(nba.unique$Weight ~ nba.unique$Altura)
+levels(nba.unique$Altura) 
+nba.unique$Altura <- factor(nba.unique$Altura, levels = levels(nba.unique$Altura)[c(2,3,1)]) # ordeno los factores para que me muestre de más bajo a más alto
+# Es posible que se pueda hacer esto en un solo paso pero no he sabido como hacerlo.
+ 
+boxplot(nba.unique$Weight~nba.unique$Altura) # Usando ~ le digo que me muestre los pesos en función de las alturas. 
 
 ```
 
@@ -447,7 +461,7 @@ boxplot(nba.unique$Weight ~ nba.unique$Altura)
 ## 7.5 Hacer un listado con el nombre de jugadores que tienen una altura ‘normal’ y un peso ‘alto’. Ordenar alfabéticamente por nombre.
 ```{r}
 
-jugadores_alturanormal_pesoalto <- nba.unique[nba.unique$Altura == "normal" & nba.unique$Peso == "alto",6 ]
+jugadores_alturanormal_pesoalto <- nba.unique[nba.unique$Altura == "normal" & nba.unique$Peso == "alto",6 ] # directamente hago un filro a el DF nba.unique. Con & lo que hago es enlazar filtros los cuales se tienen que cumplir. 
 
 jugadores_alturanormal_pesoalto 
 ```
