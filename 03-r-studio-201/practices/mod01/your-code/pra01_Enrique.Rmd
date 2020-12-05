@@ -1,0 +1,328 @@
+---
+title: 'Minería de datos: mod01'
+author: "Autor: Enrique Gómez Viñola"
+date: "noviembre 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+******
+# Introducción
+******
+
+## Descripción de la PRÁCTICA a realizar
+La prueba está estructurada en 1 ejercicio teórico/práctico y 1 ejercicio práctico que pide que se desarrolle la fase de preparación en un juego de datos.  
+Deben responderse todos los ejercicios para poder superar la PRA.  
+
+## Recursos
+Para realizar esta práctica recomendamos la lectura de los siguientes documentos:  
+
+* RStudio Cheat Sheet: Disponible en el aula Laboratorio de Minería de datos.  
+* R Base Cheat Sheet: Disponible en el aula Laboratorio de Minería de datos.  
+
+*****
+# Enunciado  
+******
+Como ejemplo, trabajaremos con el conjunto de datos "Titanic" que recoge datos sobre el famoso crucero y sobre el que es fácil realizar tareas de clasificación predictiva sobre la variable "Survived".   
+
+De momento dejaremos para las siguientes prácticas el estudio de algoritmos predictivos y nos centraremos por ahora en el estudio de las variables de una muestra de datos, es decir, haremos un trabajo descriptivo del mismo. 
+
+Las actividades que llevaremos a cabo en esta práctica suelen enmarcarse en las fases iniciales de un proyecto de minería de datos y consisten en la selección de caraterísticas o variables y la preparación del los  datos para posteriormente ser consumido por un algoritmo.
+
+Las técnicas que trabajaremos son las siguientes:  
+
+1. Normalización  
+2. Discretización  
+3. Gestión de valores nulos  
+4. Estudio de correlaciones  
+5. Reducción de la dimensionalidad
+6. Análisis visual del conjunto de datos  
+
+******
+# Ejemplo de estudio visual con el juego de datos Titanic
+******
+
+## Procesos de limpieza del conjunto de datos
+
+Primer contacto con el conjunto de datos, visualizamos su estructura.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Cargamos los paquetes R que vamos a usar
+library(ggplot2)
+library(dplyr)
+
+# Guardamos el conjunto de datos test y train en un único dataset
+test <- read.csv('/home/enrique/neoland/NEOLAND-DS2020-datalabs/03-r-studio-201/practices/mod01/titanic-test.csv',stringsAsFactors = FALSE)
+train <- read.csv('/home/enrique/neoland/NEOLAND-DS2020-datalabs/03-r-studio-201/practices/mod01/titanic-train.csv', stringsAsFactors = FALSE)
+
+# Unimos los dos conjuntos de datos en uno solo
+totalData <- bind_rows(train,test)
+filas=dim(train)[1]
+
+# Verificamos la estructura del conjunto de datos
+str(totalData)
+```
+
+Trabajamos los atributos con valores vacíos.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Estadísticas de valores vacíos
+colSums(is.na(totalData))
+colSums(totalData=="")
+
+# Tomamos valor "C" para los valores vacíos de la variable "Embarked"
+totalData$Embarked[totalData$Embarked==""]="C"
+
+# Tomamos la media para valores vacíos de la variable "Age"
+totalData$Age[is.na(totalData$Age)] <- mean(totalData$Age,na.rm=T)
+```
+
+Discretizamos cuando tiene sentido y en función de cada variable.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# ¿Con qué variables tendría sentido un proceso de discretización?
+apply(totalData,2, function(x) length(unique(x)))
+
+# Discretizamos las variables con pocas clases
+cols<-c("Survived","Pclass","Sex","Embarked")
+for (i in cols){
+  totalData[,i] <- as.factor(totalData[,i])
+}
+
+# Después de los cambios, analizamos la nueva estructura del conjunto de datos
+str(totalData)
+```
+
+
+## Procesos de análisis del conjunto de datos
+
+Nos proponemos analizar las relaciones entre las diferentes variables del conjunto de datos.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Visualizamos la relación entre las variables "sex" y "survival":
+ggplot(data=totalData[1:filas,],aes(x=Sex,fill=Survived))+geom_bar()
+
+# Otro punto de vista. Survival como función de Embarked:
+ggplot(data = totalData[1:filas,],aes(x=Embarked,fill=Survived))+geom_bar(position="fill")+ylab("Frecuencia")
+
+```
+
+Obtenemos una matriz de porcentages de frecuencia.  
+Vemos, por ejemplo que la probabilidad de sobrevivir si se embarcó en "C" es de un 55,88%
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+t<-table(totalData[1:filas,]$Embarked,totalData[1:filas,]$Survived)
+for (i in 1:dim(t)[1]){
+    t[i,]<-t[i,]/sum(t[i,])*100
+}
+t
+```
+
+Veamos ahora como en un mismo gráfico de frecuencias podemos trabajar con 3 variables: Embarked, Survived y Pclass.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Ahora, podemos dividir el gráfico de Embarked por Pclass:
+ggplot(data = totalData[1:filas,],aes(x=Embarked,fill=Survived))+geom_bar(position="fill")+facet_wrap(~Pclass)
+```
+
+Comparemos ahora dos gráficos de frecuencias: Survived-SibSp y Survived-Parch
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survivial como función de SibSp y Parch
+ggplot(data = totalData[1:filas,],aes(x=SibSp,fill=Survived))+geom_bar()
+ggplot(data = totalData[1:filas,],aes(x=Parch,fill=Survived))+geom_bar()
+# Vemos como las forma de estos dos gráficos es similar. Este hecho nos puede indicar presencia de correlaciones altas.
+```
+
+Veamos un ejemplo de construcción de una variable nueva: Tamaño de familia
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# Construimos un atributo nuevo: family size.
+totalData$FamilySize <- totalData$SibSp + totalData$Parch +1;
+totalData1<-totalData[1:filas,]
+ggplot(data = totalData1[!is.na(totalData[1:filas,]$FamilySize),],aes(x=FamilySize,fill=Survived))+geom_histogram(binwidth =1,position="fill")+ylab("Frecuencia")
+
+# Observamos como familias de entre 2 y 6 miembros tienen más del 50% de posibilidades de supervivencia.  
+```
+
+Veamos ahora dos gráficos que nos compara los atributos Age y Survived.  
+Observamos como el parámetro position="fill" nos da la proporción acumulada de un atributo dentro de otro
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survival como función de age:
+ggplot(data = totalData1[!(is.na(totalData[1:filas,]$Age)),],aes(x=Age,fill=Survived))+geom_histogram(binwidth =3)
+ggplot(data = totalData1[!is.na(totalData[1:filas,]$Age),],aes(x=Age,fill=Survived))+geom_histogram(binwidth = 3,position="fill")+ylab("Frecuencia")
+```
+
+
+
+******
+# Ejercicios
+******
+
+## Ejercicio 1: 
+
+Estudia los tres casos siguientes y contesta, de forma razonada la  pregunta que se realiza:
+
+* Disponemos de un conjunto de variables referentes a vehículos, tales como la marca, modelo, año de matriculación, etc. También se dispone del precio al que se vendieron. Al poner a la venta a un nuevo vehículo, se dispone de las variables que lo describen, pero se desconoce el precio. ¿Qué tipo de algoritmo se debería aplicar para predecir de forma automática el precio?
+
+* En un almacén de naranjas se tiene una máquina, que de forma automática obtiene un conjunto de variables de cada naranja, como su tamaño, acidez, grado maduración, etc. Si se desea estudiar las naranjas por tipos, según las variables obtenidas, ¿qué tipo de algoritmo es el más adecuado?
+
+* Un servicio de música por internet dispone de los historiales de audición de sus clientes: Qué canciones y qué grupos eligen los clientes a lo largo del tiempo de sus escuchas. La empresa desea crear un sistema  que proponga la siguiente canción y grupo en función de la canción que se ha escuchado antes. ¿Qué tipo de algoritmo es el más adecuado?
+
+### Respuesta 1:
+> Escribe aquí la respuesta a la pregunta
+
+## Ejercicio 2:  
+A partir del conjunto de datos disponible en el siguiente enlace http://archive.ics.uci.edu/ml/datasets/Adult , realiza un estudio tomando como propuesta inicial al que se ha realizado con el conjunto de datos "Titanic". Amplia la propuesta generando nuevos indicadores o solucionando otros problemas expuestos en el módulo 2. Explica el proceso que has seguido, qué conocimiento obtienes de los datos, qué objetivo te has fijado y detalla los pasos, técnicas usadas y los problemas resueltos.
+
+Nota: Si lo deseas puedes utilizar otro conjunto de datos propio o de algun repositorio open data siempre que sea similar en diversidad de tipos de variables al propuesto. 
+
+### Respuesta 2:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Cargamos el juego de datos
+datosAdult <- read.csv('http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',stringsAsFactors = FALSE, header = FALSE)
+
+# Nombres de los atributos
+names(datosAdult) <- c("age","workclass","fnlwgt","education","education-num","marital-status","occupation","relationship","race","sex","capital-gain","capital-loss","hour-per-week","native-country","income")
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Redacta aquí el código R para el estudio del juego de datos Adult
+# Cambio el DataSet para no volver a trabajar con Adult. He elegido este DataSet que trata sobre el comportamiento de los determinados usuarios en la compra online. 
+
+DataOnlineShopers <- read.csv('http://archive.ics.uci.edu/ml/machine-learning-databases/00468/online_shoppers_intention.csv',stringsAsFactors = FALSE)
+
+# el objetivo  sería analizar sus tendencias y para predecir en que les ha llevado a comprar y que no. 
+
+```
+Copio la información que aparece en la la web del DataSet. 
+URL: https://archive.ics.uci.edu/ml/datasets/Online+Shoppers+Purchasing+Intention+Dataset
+
+### Source:
+
+Source
+1. C. Okan Sakar
+Department of Computer Engineering, Faculty of
+Engineering and Natural Sciences, Bahcesehir University,
+34349 Besiktas, Istanbul, Turkey
+
+2. Yomi Kastro
+Inveon Information Technologies Consultancy and Trade,
+34335 Istanbul, Turkey
+
+### Data Set Information:
+
+The dataset consists of feature vectors belonging to 12,330 sessions.
+The dataset was formed so that each session
+would belong to a different user in a 1-year period to avoid
+any tendency to a specific campaign, special day, user
+profile, or period.
+
+###  Attribute Information:
+
+The dataset consists of 10 numerical and 8 categorical attributes.
+The 'Revenue' attribute can be used as the class label.
+
+"Administrative", "Administrative Duration", "Informational", "Informational Duration", "Product Related" and "Product Related Duration" represent the number of different types of pages visited by the visitor in that session and total time spent in each of these page categories. The values of these features are derived from the URL information of the pages visited by the user and updated in real time when a user takes an action, e.g. moving from one page to another. The "Bounce Rate", "Exit Rate" and "Page Value" features represent the metrics measured by "Google Analytics" for each page in the e-commerce site. The value of "Bounce Rate" feature for a web page refers to the percentage of visitors who enter the site from that page and then leave ("bounce") without triggering any other requests to the analytics server during that session. The value of "Exit Rate" feature for a specific web page is calculated as for all pageviews to the page, the percentage that were the last in the session. The "Page Value" feature represents the average value for a web page that a user visited before completing an e-commerce transaction. The "Special Day" feature indicates the closeness of the site visiting time to a specific special day (e.g. Mother’s Day, Valentine's Day) in which the sessions are more likely to be finalized with transaction. The value of this attribute is determined by considering the dynamics of e-commerce such as the duration between the order date and delivery date. For example, for Valentina’s day, this value takes a nonzero value between February 2 and February 12, zero before and after this date unless it is close to another special day, and its maximum value of 1 on February 8. The dataset also includes operating system, browser, region, traffic type, visitor type as returning or new visitor, a Boolean value indicating whether the date of the visit is weekend, and month of the year.
+
+Relevant Papers:
+
+Sakar, C.O., Polat, S.O., Katircioglu, M. et al. Neural Comput & Applic (2018). [Web Link]
+
+
+Citation Request:
+
+If you use this dataset, please cite:
+Sakar, C.O., Polat, S.O., Katircioglu, M. et al. Neural Comput & Applic (2018). [Web Link]
+
+
+
+#### Revisión de estructura de los datos
+```{r}
+# Estructura de los dato
+str(DataOnlineShopers)
+```
+Vemos como hay 12330 Observaciones y 18 variables de diferentes tipos. A destacar: 
+* La mayoria son numéricas aunuqe según los nombres podemos deducir que no todas son valores cuantitativos. Los cualitativos son: OperatingSystems, Browser, Region, TrafficType.
+* Hay una variable temporal que es Month y otra que categoriza a los clientes VisitorType
+Viendo esta estructura, el objetivo será determinar que características tienen las compras, variable revenue = True. 
+```{r}
+# Valores nulos o vacios:
+colSums(is.na(DataOnlineShopers))
+colSums(DataOnlineShopers=="")
+```
+No hay Valores nulos o vacios. 
+#### Dicretización de los datos
+```{r}
+apply(DataOnlineShopers,2, function(x) length(unique(x)))
+```
+Las variables Administrative Informational y Porduct Related hacen referencia al número de páginas visitadas en una sesión antes de realizar o no una compra. CReo una nueva variable llamada web_visitadas que sume estos tres valores. Hago lo mismo para el tiempo pasado en cada web.
+```{r}
+DataOnlineShopers$Web_visitadas <- DataOnlineShopers$Administrative + DataOnlineShopers$Informational + DataOnlineShopers$ProductRelated
+DataOnlineShopers$Web_visitadas_duration <- DataOnlineShopers$Administrative_Duration + DataOnlineShopers$Informational_Duration + DataOnlineShopers$ProductRelated_Duration
+```
+##### SpecialDay
+
+```{r}
+table(DataOnlineShopers$SpecialDay)
+# Toma valores de 0 a 1 con saltos de 0.2. Indica la probabilidad de que se diera una compra en relación a la cercania de un día especial. 
+```
+
+
+```{r}
+# Relacionamos el valor con las ventas. 
+table(DataOnlineShopers$SpecialDay,DataOnlineShopers$Revenue)/nrow(DataOnlineShopers)
+```
+
+```{r}
+table(DataOnlineShopers$SpecialDay)/nrow(DataOnlineShopers)
+hist(DataOnlineShopers$SpecialDay)
+```
+Podemos afirmar que es una variable que apenas tiene relevancia. En lel 90% de los casos el valor es 0. 
+
+##### Month
+```{r}
+ggplot(data=DataOnlineShopers,aes(x=Month,fill=Revenue))+geom_bar()
+# los datos de Month no están ordenados. 
+```
+```{r}
+# Factorización y ordenación de los datos de de Month
+DataOnlineShopers_BK <- DataOnlineShopers # hago un copia de seguridad por si acaso. 
+DataOnlineShopers$Month <- as.factor(DataOnlineShopers$Month)
+levels(DataOnlineShopers$Month)
+DataOnlineShopers$Month <- factor(DataOnlineShopers$Month, levels = levels(DataOnlineShopers$Month)[c(3,6,7,5,4,1,10,9,8,2)])
+is.factor(DataOnlineShopers$Month)
+ggplot(data=DataOnlineShopers,aes(x=Month,fill=Revenue))+geom_bar() # ahora he obtenido el mismo gráfico que el anterior pero con los meses ordenados. 
+```
+Observamos como el mes de Abril no aparece y tenemos datos de Febrero a Diciembe con algunos picos importantes. Los meses de Abril, Mayo, Noviembre y Diciembre son los que tienen un mayor número de sesiones. 
+
+#### VisitorType
+```{r}
+table(DataOnlineShopers$VisitorType)
+table(DataOnlineShopers$VisitorType,DataOnlineShopers$Revenue)/
+```
+```{r}
+ggplot(data=DataOnlineShopers,aes(x=VisitorType,fill=Revenue))+geom_bar()
+```
+
+
+Cosas Por hacer: 
+* Relacionar las compras realizadas con el número de pag visitadas y el tiempo invertido
+* relacionar las compras con el valor SpecialDay, va de 0 a 1.
+* Relacionar las compras por Month. 

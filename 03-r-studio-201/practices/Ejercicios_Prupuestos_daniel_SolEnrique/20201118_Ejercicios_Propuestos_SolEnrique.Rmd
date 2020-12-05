@@ -1,0 +1,129 @@
+---
+title: "Ejercicios_Propuesto_20201118"
+author: "Quiquegv"
+date: "26/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Ejercicio 1
+Calcule una función que determine si un año es bisiesto o no.
+Recuerde que un año es bisiesto si es multiplo de 4 o es multiplo de 400.
+Es decir, los años 1700, 1800 o 1900 son divisbles por 4 divisibles pero no divisbles por 400.
+En cambio, los años 1600 o 2000 son divisbles por 4 divisibles y divisbles por 400.
+
+
+```{r}
+añobisiesto <- function(anyo){
+  if (anyo%%100 ==0){
+    if (anyo%%400 == 0){cat(anyo," es un año bisiesto")}
+    else {cat(anyo," no es un año bisiesto")}
+  }else{
+    if (anyo%%4 == 0){cat(anyo," es un año bisiesto")}
+    else{cat(anyo," no es un año bisiesto")}
+  }
+}
+```
+
+```{r}
+añobisiesto(1450)
+```
+
+## Ejercicio 2
+Escriba la función que dada una cantidad de dinero calcule el desglose en billetes y monedas, empezando por el billete mayor al menor y contemabldo solo las monedas de 2€ y 1€. Por ejemplo, para la cantidad de dinero, 1378€
+* 2 billetes de 500€
+* 1 billete  de 200€
+* 1 billete  de 100€
+* 1 billete  de  50€
+* 1 billete  de  20€
+* 1 billete  de   5€
+* 1 moneda   de   2€
+* 1 moneda   de   1€
+
+```{r}
+monedas <- c(500,200,100,50,20,10,5,2,1)
+conteodinero <- function(dinero){
+  dinero_restante <- dinero
+  for (i in monedas){
+    if (dinero_restante >= i){
+      cantidad_monedas = floor(dinero_restante/i)
+      dinero_restante = dinero_restante - (cantidad_monedas*i)
+      if (cantidad_monedas == 1){
+        if (i>2){cat("\n",cantidad_monedas," billete de ",i,"€")
+        }else{cat("\n",cantidad_monedas," moneda de ",i,"€")}
+      }else{
+        if (i>2){cat("\n",cantidad_monedas," billetes de ",i,"€")
+        }else{cat("\n",cantidad_monedas," monedas de ",i,"€")
+      }
+    }
+  }
+}}
+```
+
+```{r}
+conteodinero(4512)
+```
+
+## Ejercico 3
+Un banco está intersado en llevar el registro de clientes que solicitan una extracción de dinero de un cajero, para ello el cliente debe introducir la cantidad de dinero a extraer del cajero y éste le devolverá el desglose de dicha cantidad en billetede de 200 a 10 euros. 
+
+Al finalizar la opreación, se debe quedar en un fichero de registro una traza de los billetes dispensado al cliente junto con su nombre, sus apellidos y la *hora local* en el que se realizó dicha operacion. Guarda el fichero en el formato que más comodo te resulte.
+
+Por ejemplo, para la cantidad de dinero, 370€
+* 1 billete  de 200€
+* 1 billete  de 100€
+* 1 billete  de  50€
+* 1 billete  de  20€
+
+```{r}
+# Ver como generar archivos en R y añadir líneas.
+library(lubridate) # Cargo lubridate para poder meter la fecha y hora actual
+
+```
+
+```{r}
+conteodinero2 <- function(dinero){ # Modifico la ufnción deel ejercicio anterior para aplicarla a este
+  dinero_restante <- dinero
+  num_monedas <- c()
+  monedas2 <- c(200,100,50,20,10) # solamente selecciono los billetes de 200 a 10
+  for (i in monedas2){
+    if (dinero_restante >= i){
+      cantidad_monedas = floor(dinero_restante/i)
+      dinero_restante = dinero_restante - (cantidad_monedas*i)
+      num_monedas <- c(num_monedas, cantidad_monedas) # En esta función lo que hago es crear un vector que acumule los núm de billetes de cada cantidad.
+    }else{
+        cantidad_monedas = 0 # si no hay billetes de una cantidad pone 0. 
+        num_monedas <- c(num_monedas, cantidad_monedas)
+      }
+  }
+  num_monedas
+}
+conteodinero2(10010)
+```
+
+
+
+```{r}
+registrodinero <- function(){ # genero otra función que sera la que sirva de registro. 
+  Importe <- scan(what = integer(), n = 1) # Meto importe con Scan. le pongo n=1 para que acepte solo un valor. 
+  Nombre_apellidos <- scan(what = character(), n = 1, sep = ",") # Otro Scan para le nombre. También tiene n=1 t sep = , para que al poner nombres y apellidos no interprete el espacio como separador. 
+  num_monedas <- conteodinero2(Importe) # aquí llamo la función del chunk anterior que he convertido en un vector con el numero de billetes
+  registro_bancario <- c(Nombre_apellidos,num_monedas,Importe,as.character(now()))
+  registro_bancario # genero un registrro bancario con el nombre, el num de billetes, el importe y la fecha y hora del momento. 
+  categorias <- c('Nombre_Cliente', 
+                                        'Billetes_200€',
+                                        'Billetes_100€',
+                                        'Billetes_50€',
+                                        'Billetes_20€',
+                                        'Billetes_10€',
+                                        'Total_extraido',
+                                        'Fecha')
+  archivo_bancarios <- data.frame(categorias,registro_bancario)
+  write.csv(archivo_bancarios, file = Nombre_apellidos, row.names = FALSE)
+} # finalmente he creado un DF para exportar al CSV que contiene esta información. El nombre deel arhcivo sera el nombre y apellidos introducidos por el cliente. 
+registrodinero()
+```
+
+
