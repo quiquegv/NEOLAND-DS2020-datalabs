@@ -6,7 +6,7 @@ output: html_notebook
 # Practicamos con Lubridate
 
 ```{r}
-library(tidyverse)
+library(dplyr)
 library(lubridate)
 library(nycflights13)
 ```

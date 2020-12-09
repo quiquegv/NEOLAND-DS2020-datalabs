@@ -1,0 +1,1352 @@
+---
+title: "Calidad del aire Gijón - actividad 3"
+author: "Enrique_Gómez"
+Date: Noviembre, 2020
+output:
+  html_document: null
+  fig_width: 10
+  pdf_document: default
+fig_height: 7
+toc: yes
+number_sections: yes
+code_folding: show
+---
+
+# Contexto - 
+A partir de los datos abiertos de contaminación de las estaciones meteorológicas de Gijón:
+- Hacer un estudio sobre los datos con el fin de conocer si existen diferencias significativas entre estaciones.
+- Hacer un forecast de evolución de un par de indicadores en una de las estaciones que escojas.
+
+Podrás encontrar la información en la dirección [http://transparencia.gijon.es](http://transparencia.gijon.es)
+
+Ejemplos:
+- Dataset CSV, JSON, XML ...
+CSV: http://opendata.gijon.es/descargar.php?id=1&tipo=CSV
+
+Se procederá en el siguiente orden:
+1. Carga de librerias y Dataset
+2. Limpieza del dataset
+3. EDA (Exploratory Data Analysis)
+4. Visualización de las medias de los valores en las diferentes estaciones
+5. Valorar las diferencias estadistícas con t-test, Anova
+6. Realizar un forecast para dos métricas significativas (opcional) - ARIMA / FORECAST
+
+## 1. Instalación y Carga de las librerías
+
+```{r}
+# Carga de las librerías
+library(lubridate)   # dar formato a la variable Date
+library(leaflet)# creación del mapa
+library(dplyr) # manipular datos
+library(ggplot2) # data visualization
+library(RColorBrewer) # colores
+library(tidyr)  # otras funciones para datos
+library(fmsb)# visualizar gráfico en radar# Carga de las librerías
+library(rapportools) # sirve para buscar outliers con rp.outlier
+```
+
+## 2. Carga del dataset y análisis
+
+El dataset disponible y actualizado cada hora reportando los datos de los últimos 7 días, se encuentra disponible en la página web de Datos Abierto del ayuntamiento de Gijón. Asimismo encontramos los datasets de las estaciones, parámetros utilizados y datos de los últimos 18 años. [Catálogo de datos](http://transparencia.gijon.es/page/1808-catalogo-de-datos)
+
+```{r, message = FALSE, echo = FALSE}
+# Creamos el dataset del fichero de las estaciones de Gijon de los últimos 7 días (actualizado a fecha 8 de abril)
+
+# Observar si existe un formato fecha y time...para cálculo del time-series
+dataset_gijon <- read.csv("http://opendata.gijon.es/descargar.php?id=1&tipo=CSV", encoding = 'UTF-8', stringsAsFactors = FALSE)
+
+# Veamos los 10 primeros resultados
+head(dataset_gijon[1:8], 10)
+head(dataset_gijon[9:17], 10)
+head(dataset_gijon[18:23], 10)
+
+# Totalizamos los datos resultantes
+dim(dataset_gijon)
+```
+
+```{r}
+# Realizamos una copia del dataset original y con un header personalizado sin caracteres especiales
+datasetHeader <- c("EstacionID",
+                   "EstacionName","Lat","Lon",
+                   "Fecha_UTC","Periodo",
+                   "SO2","NO","NO2","CO","PM10","O3","dd","vv",
+                   "TMP","HR","PRB","RS","LL","BEN",
+                   "TOL","MXIL","PM25"
+                   )
+
+colnames(dataset_gijon) <- c(datasetHeader)
+gijon_lastWeek <- dataset_gijon                                     
+                                     
+# Analizamos las diferentes estaciones y las enumeramos
+table(gijon_lastWeek$EstacionID)
+table(gijon_lastWeek$EstacionName)
+
+# Convertimos en categóricas la Estación o ID
+gijon_lastWeek$EstacionID = as.numeric(gijon_lastWeek$EstacionID)
+
+# Comprobamos nuevamente los resultados
+str(gijon_lastWeek)
+
+# Revisamos el número de NA en el DF
+colSums(is.na(dataset_gijon))
+```
+Observamos que hay 5 estaciones con 168 observaciones cada uno. También vemos que hay muchas variables con valores nulos. Habrá que tratarlos o excluirlos para poder compara entre ellos los datos. 
+Las variables atmosféricas son:  
+
+* DD	Direccion del viento	DD	Grados	
+* VV	Velocidad del viento	VV	m/s	
+* TMP	Temperatura Seca	TMP	ºC	
+* HR	Humedad relativa	HR	%hr	
+* PRB	Presion Atmosferica	PRB	mb	
+* RS	Radiacion Solar	RS	W/m²	
+* LL	Precipitacion	LL	l/m²	
+Es curioso como si observamos las variables denominadas atmosféricas, todas tienen la misma cantidad de nulos 672. Hay 168 obs por estación por tanto, hay 4 estaciones que no miden estas variables (670/168 = 4). Tendremos que comprobar esto y ver que estaciones no miden estas variables. 
+
+Las variables ambientales son: 
+* SO2	Concentracion de SO2	SO2	µg/m³	
+* NO	Concentracion de NO	NO	µg/m³	
+* NO2	Concentracion de NO2	NO2	µg/m
+* CO	Concentracion de CO	CO	mg/m³	
+* O3	Concentracion de Ozono	O3	µg/m³	
+* PM10	Particulas en suspension <10 µg/m³	PM10	µg/m³	
+* BEN	Concentración de benceno	BEN	µg/m³	
+* TOL	Tolueno	TOL	µg/m³	
+* MXIL	MXileno	MXIL	µg/m³	
+* PM25	Concentración de PM2,5	PM25	µg/m³	
+
+Ocurre algo similar que con las ambientales pero de una forma más dispar. Por ejemplo, BEN, TOL y  MXIL tienen 840 nulos, esto es (840/168 = 5), hay 5 estaciones que no miden estos valores. 
+Las unicas variables sin nulos son NO y NO2. 
+
+```{r}
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(sum(is.na(dd)),
+                                                        sum(is.na(vv)),
+                                                        sum(is.na(TMP)),
+                                                        sum(is.na(HR)),
+                                                        sum(is.na(PRB)),
+                                                        sum(is.na(RS)),
+                                                        sum(is.na(LL)),
+                                                        )
+ # Revisamos los valores atmosféricos y vemos que solamente Avda de la Constitución y Mointevil no tienen valores nulos.  
+```
+```{r}
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(sum(is.na(SO2)),
+                                                        sum(is.na(NO)),
+                                                        sum(is.na(NO2)),
+                                                        sum(is.na(CO)),
+                                                        sum(is.na(O3)),
+                                                        sum(is.na(PM10)),
+                                                        sum(is.na(BEN)),
+                                                        sum(is.na(TOL)),
+                                                        sum(is.na(MXIL)),
+                                                        sum(is.na(PM25))
+                                                        )
+```
+Al hacer los mismo con las variables ambientales confirmamos que NO y NO2 no tienen ningun nulo en nignuna de las estaciones. Y en General las variables que tienen nulos en una estación es porque no toman datos de esa determinada variable salvo algunas excepciones que habrá que tratar. Como con PM10 que tiene algunos pocos nulos en las estaciones Argentina, Castilla, Constitución y Hermanos Felgueroso. Lo mismo ocurre con PM25 que tiene 1 y 2 nulos respectivamente en Constituciñón y Montevil.  
+Tambien destaca que ninguna estación tiene completa todos los datos en todas las variables. Avenida de la Constitución es la que tiene los datos más completos, solamente tiene nulos en CO (168) y en uno y dos nulos respectivamente en PM10 y PM25.  En resumen: 
+* SO2 y O3 es comparable entre todas las estaciones (no nulos) menos la estación de Santa Bárbara que tiene todos lo valores nulos 
+* NO y N Son comparables estre todas las estaciones.
+* C0 Se puede comparar entre las estaciones de Argentina, Castilla y Santa Bárbara. 
+* PM10 es comparable entre todas las estaciones a excepción de Motevil (valores nulos). Para hacerlo habrá que ajustar algunos nulos en las Estaciones de Argentina, Castilla y Constitución. 
+
+### Tratamiento de fechas
+```{r}
+# Comenzamos con la transformación de la columna fecha y su formato
+# anyo = Y
+# mes = m
+# day = d
+# Hour = H
+# Minute = M
+# Segundos = S
+
+gijon_lastWeek$Fecha_UTC <- ymd(gijon_lastWeek$Fecha_UTC, tz = "Europe/Madrid")
+
+gijon_lastWeek$Date <- format(gijon_lastWeek$Fecha_UTC, "%Y-%m-%d")
+gijon_lastWeek$Time <- format(gijon_lastWeek$Fecha_UTC, "%T")
+
+# Este formato tiene un formato calendar-time
+gijon_lastWeek$DatePOSIXct <- as.POSIXct(gijon_lastWeek$Date, format = "%Y-%m-%d")
+
+# Alternativa con POSIXlt (lista de vectores y al parecer debería ser Human-friendly)
+gijon_lastWeek$DatePOSIXlt <- as.POSIXlt(gijon_lastWeek$Date, format = "%Y-%m-%d")
+
+
+# crear : day, month, year, hour, weekday, ...
+gijon_lastWeek$month <- format(gijon_lastWeek$Fecha_UTC, "%m") # Variable Month
+gijon_lastWeek$day <- format(gijon_lastWeek$Fecha_UTC, "%d") # Variable day
+gijon_lastWeek$year <- format(gijon_lastWeek$Fecha_UTC, "%Y") # Variable year
+gijon_lastWeek$wday <- wday(gijon_lastWeek$Fecha_UTC) # Variable con el día de la semana. Recordatorio: Va de 1 (Domingo) a 7 (Sábado)
+gijon_lastWeek$wday_letra <- wday(gijon_lastWeek$Fecha_UTC, label = TRUE) # Día de la semana en letra.
+```
+ 
+En cuanto a la variable hour, existe ya una variable en el DF llamada periodo que encaja con la hora en concreto. Usamos esa. 
+
+```{r}
+# Adicionalmente he creado una variable que es Fecha Hora que contiene la fecha con la hora. Así podemos hacer gráficos y ver la evolución de una variable. 
+gijon_lastWeek$Fecha_Hora <- make_datetime(as.integer(gijon_lastWeek$year),
+                             as.integer(gijon_lastWeek$month),
+                             as.integer(gijon_lastWeek$day),
+                             gijon_lastWeek$Periodo)
+
+```
+`
+
+```{r}
+# NOTA adicional: 
+gijon_lastWeek %>% group_by(EstacionName, Fecha_UTC) %>% count()
+```
+Vemos como no todos las estaciones tienen actualizados los valores en los mismos días. Veremos llegado el caso como lo adaptamos según las estaciones a comparaR. Importante ver como Santa Barbara tiene datos del año 2015. Lo ideal igual es comparar por días concretos de la semana y días del mes para ver que no haya divergencias significativas de la muestra. 
+
+### Análisis de datos
+Voy a revisar los datos de la muestra y después realizaré análisis individuales para cada uno. 
+MEDIA:
+```{r}
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(SO2,na.rm = TRUE),
+                                                        mean(NO,na.rm = TRUE),
+                                                        mean(NO2,na.rm = TRUE),
+                                                        mean(CO,na.rm = TRUE),
+                                                        mean(O3,na.rm = TRUE),
+                                                        mean(PM10,na.rm = TRUE),
+                                                        mean(BEN,na.rm = TRUE),
+                                                        mean(TOL,na.rm = TRUE),
+                                                        mean(MXIL,na.rm = TRUE),
+                                                        mean(PM25,na.rm = TRUE))
+```
+```{r}
+gijon_lastWeek %>% group_by(Periodo) %>% summarise(mean(SO2,na.rm = TRUE),
+                                                        mean(NO,na.rm = TRUE),
+                                                        mean(NO2,na.rm = TRUE),
+                                                        mean(CO,na.rm = TRUE),
+                                                        mean(O3,na.rm = TRUE),
+                                                        mean(PM10,na.rm = TRUE),
+                                                        mean(BEN,na.rm = TRUE),
+                                                        mean(TOL,na.rm = TRUE),
+                                                        mean(MXIL,na.rm = TRUE),
+                                                        mean(PM25,na.rm = TRUE))
+```
+Con las tablas lo unico que podemos afirmar es: 
+* Por un lado que hay muchos datos vacios en las estaciones (algo que ya conociamos) y que entre ellas hay diferencias de la media entre las variables. 
+* En cuanto a los periodos, también se observan variaciones significativas entre los periodos.
+
+#### Tratamiento de nulos                                             
+```{r}
+# Tratamiento de Nulos de la variable PM10 según periodo y estación. 
+#Estación Avenida Argentina
+# Primero hay que detectar dónde estan los nulos: 
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Argentina') %>% group_by(Periodo) %>% summarise(sum(is.na(PM10)))
+# Después calculamos la media para esa estación en los periodos con nulos que son el 1 y el 9
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Argentina') %>% group_by(Periodo) %>% summarise(mean(PM10,na.rm = TRUE))
+# Para el valor del periodo 1 la media es 29.16667 y para el del periodo 17 la media es 31.85714. 
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Argentina' & is.na(gijon_lastWeek$PM10) == TRUE] =
+  mean(gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Argentina'], na.rm = TRUE)
+
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 17 & gijon_lastWeek$EstacionName == 'Estación Avenida Argentina' & is.na(gijon_lastWeek$PM10) == TRUE] =
+  mean(gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 17 & gijon_lastWeek$EstacionName == 'Estación Avenida Argentina'], na.rm = TRUE)
+```
+
+```{r}
+# Comprobación: 
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Argentina') %>% group_by(Periodo) %>% summarise(sum(is.na(PM10))) # Ya no salen Nulos.
+
+```
+```{r}
+# Estación Avenida Castilla
+# Primero hay que detectar dónde estan los nulos: 
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Castilla') %>% group_by(Periodo) %>% summarise(sum(is.na(PM10)))
+# Después calculamos la media para esa estación en los periodos con nulos que son el 1
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Castilla') %>% group_by(Periodo) %>% summarise(mean(PM10,na.rm = TRUE))
+# Los dos valores nulos están en el periodo 1. EL valor de la media es 12.20. 
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Castilla' & is.na(gijon_lastWeek$PM10) == TRUE] =
+  mean(gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Castilla'], na.rm = TRUE)
+
+# Comprobación
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Castilla']
+```
+```{r}
+# Estación Avenida Constitución
+# Primero hay que detectar dónde estan los nulos: 
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Constitución') %>% group_by(Periodo) %>% summarise(sum(is.na(PM10)))
+# Después calculamos la media para esa estación en los periodos con nulos que son el 1
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Constitución') %>% group_by(Periodo) %>% summarise(mean(PM10,na.rm = TRUE))
+# El valor nulo está en el periodo 1. EL valor de la media es 18.16. 
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Constitución' & is.na(gijon_lastWeek$PM10) == TRUE] = mean(gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Constitución'], na.rm = TRUE)
+
+# Comprobación
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Constitución']
+```
+
+
+```{r}
+# Estación Avenida Hermanos Felgueroso
+# Primero hay que detectar dónde estan los nulos: 
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Hermanos Felgueroso') %>% group_by(Periodo) %>% summarise(sum(is.na(PM10)))
+# Después calculamos la media para esa estación en los periodos con nulos que son el 1
+gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Hermanos Felgueroso') %>% group_by(Periodo) %>% summarise(mean(PM10,na.rm = TRUE))
+# El valor nulo está en el periodo 1. EL valor de la media es 11.16. 
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Hermanos Felgueroso' & is.na(gijon_lastWeek$PM10) == TRUE] = mean(gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Hermanos Felgueroso'], na.rm = TRUE)
+
+# Comprobación
+gijon_lastWeek$PM10[gijon_lastWeek$Periodo == 1 & gijon_lastWeek$EstacionName == 'Estación Avenida Hermanos Felgueroso']
+
+```
+NOTA : Revisar la media de PM10 de cada día en el periodo 1 a ver si hay diferencia. A sido en el sexo día donde estaban localizados los nulos en su mayoria. 
+
+### Comparativa de variables
+##### Variable SO2
+Esta variable se puede comparar entre todas las estaciones salvo Santa Bárbara. 
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(SO2), sd(SO2))
+```
+Podemos ver como la variable Castilla es la que tiene una media más Alta. Av Argentina, Av. Constitución y Hnos. Felgueroso tienen medias similares y finalmente Montevil tiene una media sensiblemetne más inferior. 
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = SO2), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+Se Observa como Avenida Argentina y Avenida Castilla tienen valores más altos y más dispersos. 
+
+
+
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = SO2, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$SO2~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="SO")
+```
+```{r}
+boxplot(gijon_lastWeek$SO2~gijon_lastWeek$day, xlab="Días de la semana", ylab="O3")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6
+```
+```{r}
+boxplot(gijon_lastWeek$SO2~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="O3")
+```
+
+
+```{r}
+boxplot(gijon_lastWeek$SO2~gijon_lastWeek$EstacionID, xlab="Estación ID", ylab="SO")
+```
+Observamos también con los Boxplot que hay muchos outliers que eliminaremos de las muestras para comparar las medias y que sea lo más eficiente la comparativa a través del Test ANOVA
+Lo relevante es ver como por días si que hay distribuciones dispares, siendo el lunes el día con valores más altos, junto con el jueves. 
+```{r}
+gijon_lastWeek %>% select(EstacionID,EstacionName) %>% group_by(EstacionID,EstacionName) %>% count()
+```
+
+#### Comparativa de las medias de cada Estación de la variable SO2:
+```{r}
+# Pasos a Seguir: 
+# 1. Valores atipicos en las muestras
+# 2. Normalidad Ver tipos de test: como son muestras relativamente grandes lo mejor es usar el Test Kolmogorov - Smirnov y el Teste Normalidad Anderson-Darling
+# 3. Homogeneidad de la varianza. Test de Barlett
+# 4. Diferencias entre los grupos: Anova
+# Fuentes: https://www.maximaformacion.es/blog-dat/como-realizar-el-anova-de-una-via-en-r/ | https://rpubs.com/Joaquin_AR/218465
+# Ver clase de Python del día 13 ahí se muestra el proceso.
+```
+
+Lo primero es generar las muestras de cada Estación
+```{r}
+# Genero las muestras son DF de la var SO2 por estación:
+Argentina <- gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Argentina')
+Constitucion <- gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Constitución')
+Montevil <- gijon_lastWeek %>% filter(EstacionName == 'Estación de Montevil')
+Felgueroso <- gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Hermanos Felgueroso')
+Santa_Bárbara <- gijon_lastWeek %>% filter(EstacionName == 'Estación Santa Bárbara') # Está no vamos a usarla en el análisis de SO2
+Castilla <- gijon_lastWeek %>% filter(EstacionName == 'Estación Avenida Castilla')
+```
+
+Resumen estadístico de las muestras:
+```{r}
+summary(Constitucion$SO2)
+summary(Argentina$SO2)
+summary(Felgueroso$SO2)
+summary(Castilla$SO2)
+summary(Montevil$SO2)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+ # Histogramas: 
+hist(Constitucion$SO2)
+hist(Argentina$SO2)
+hist(Felgueroso$SO2)
+hist(Castilla$SO2)
+hist(Montevil$SO2)
+
+```
+```{r}
+# Q-Q Plot: 
+{qqnorm(Constitucion$SO2, col = "gray50", main = 'Constitucion')
+qqline(Constitucion$SO2)}
+{qqnorm(Argentina$SO2, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$SO2)}
+{qqnorm(Felgueroso$SO2, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso$SO2)}
+{qqnorm(Castilla$SO2, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$SO2)}
+{qqnorm(Montevil$SO2, pch = 19, col = "gray50", main = 'Montevil')
+qqline(Montevil$SO2)}
+
+
+```
+De los histogramas y el qq plot muestran que no siguen en prinicpio una distribución normal. Los valores outliers se representan en la parte derecha del histograma y como puntos alejados de la linea qq en el qqplot. Destacar que los que presentan mayores valores outliers y puntos máximos más alejados son las estaciones de Argentina y Castilla. En el siguiente paso procederemos a eliminar dichos outliers de la muestra.  
+
+
+Eliminación de los outliers de la muestra: 
+```{r}
+# Voy a generar muestras solamente de SO2 sin los outliers: 
+install.packages('rapportools')
+library(rapportools) # Instalo rapportools que tiene una funcion rp.outlier para identificar esas valores y eliminarlos. 
+rp.outlier(Constitucion$SO2)
+rp.outlier(Argentina$SO2)
+rp.outlier(Felgueroso$SO2)
+rp.outlier(Castilla$SO2)
+rp.outlier(Montevil$SO2)
+
+```
+```{r}
+# Voy a generar las muestras de SO2 sin los Outliers que propone la función: 
+Constitucion_SO2 <- Constitucion  %>% filter(SO2 < 8)
+Argentina_SO2 <- Argentina  %>% filter(SO2 < 17)
+Felgueroso_SO2 <- Felgueroso  %>% filter(SO2 < 10)
+Castilla_SO2 <- Castilla  %>% filter(SO2 < 28)
+Montevil_SO2 <- Montevil  %>% filter(SO2 < 5)
+# Compruebo con la función de antes: 
+rp.outlier(Constitucion_SO2$SO2)
+rp.outlier(Argentina_SO2$SO2) # En ARgentina me siguen saliendo Outliers. En La anterior no salian. Voy a aplicar una nueva reducción. 
+rp.outlier(Felgueroso_SO2$SO2)
+rp.outlier(Castilla_SO2$SO2)
+rp.outlier(Montevil_SO2$SO2)
+Argentina_SO2 <- Argentina  %>% filter(SO2 < 14)
+rp.outlier(Argentina_SO2$SO2) #Haciendo una nueva busqueda aparecen más outliers. Lo voy a dejar así y veremos en los Test si desvirtua mucho el análisis. 
+```
+```{r}
+# Saco de nuevo los qq plot para compararlos con el anterior. 
+{qqnorm(Constitucion_SO2$SO2, col = "gray50", main = 'Constitucion')
+qqline(Constitucion_SO2$SO2)}
+{qqnorm(Argentina_SO2$SO2, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina_SO2$SO2)}
+{qqnorm(Felgueroso_SO2$SO2, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso_SO2$SO2)}
+{qqnorm(Castilla_SO2$SO2, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla_SO2$SO2)}
+{qqnorm(Montevil_SO2$SO2, pch = 19, col = "gray50", main = 'Montevil')
+qqline(Montevil_SO2$SO2)}
+
+```
+Despueés de eliminar Outliers sigue habiendo bastante divergencia con la línea de la normal, sin embargo se aproxima algo más a la línea. Ahora aplicamos el teste de normalidad. 
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+# Costitución
+ks.test(x = Constitucion_SO2$SO2, 'pnorm', mean(Constitucion_SO2$SO2),sd(Constitucion_SO2$SO2))
+# Argentina
+ks.test(x = Argentina_SO2$SO2, 'pnorm', mean(Argentina_SO2$SO2),sd(Argentina_SO2$SO2))
+# Felgueroso
+ks.test(x = Felgueroso_SO2$SO2, 'pnorm', mean(Felgueroso_SO2$SO2),sd(Felgueroso_SO2$SO2))
+# Castilla
+ks.test(x = Castilla_SO2$SO2, 'pnorm', mean(Castilla_SO2$SO2),sd(Castilla_SO2$SO2))
+# Montevil
+ks.test(x = Montevil_SO2$SO2, 'pnorm', mean(Montevil_SO2$SO2),sd(Montevil_SO2$SO2))
+```
+En todos los casos el p-valor es menor que 0,05 por tanto, ninguna de las muestras se distribuye como una normal. A pesar de ello podemos ejecutar los test ANOVA pero asumimos que tienen una eficiencia en la estimación menor pero al ser muestras grandes y tener una población grandes por el teorema central del límite que dice que las muestras tienden a la normalidad cuando son grandes. 
+
+```{r}
+# Test de Barlett par la homogeneidad de Varianzas: 
+bartlett.test(list(Constitucion_SO2$SO2, Argentina_SO2$SO2,Felgueroso_SO2$SO2,Castilla_SO2$SO2,Montevil_SO2$SO2))
+
+```
+Hay diuferencias significativas entre las varianzas. El p-valor es menor que 0,05 por tanto rechazamos la hipotesis nula de homogeneidad de las varianzas. 
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de SO2 
+Gijon_SO2 <- bind_rows(Constitucion_SO2,Argentina_SO2,Felgueroso_SO2,Castilla_SO2,Montevil_SO2)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_SO2 <- aov(Gijon_SO2$SO2 ~ Gijon_SO2$EstacionName)
+summary(anova_SO2)
+plot(anova_SO2)
+```
+El p valor es menor de 0,05 por tanto hay evidencias suficientes para determinar que al menos dos medias son distintas. 
+
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_SO2)
+plot(TukeyHSD(anova_SO2))
+```
+Solamente Avenida de Constitución - Avenida Argentina y Felgueroso y Avda Argentina tienen unas medias estadisticamente Similares.
+
+##### Variable O3:
+En este caso la estación de Santa Barbara tampoco la incluimos. 
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(O3), sd(O3))
+```
+
+Observamos como las estaciones de Argentina, Castilla y Constitución tienen medias muy similares. Felgueroso y Montevil, están ligeramente por arriba y por abajo respectivamente. Las Desviaciones típicas presentan bastante similitud entre ellas. 
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = O3), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+En General los datos se distribuyen de una forma bastante homogñénea entre estciones aunque de forma dispersa.
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = O3, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+Aunque es dificil de apreciar si que se ve que los valores más o menos según el día de la semana son parecidos en las diferentes estaciones. EL sábado y viernes presenta valores más altos en todas las estaciones, junto con el jueves y el domingo y lunes está en la parte baja de las tablas. 
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$O3~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="O3")
+```
+Este gráfico confirma un poco lo anterior, aunque vemos como el domingo tiene mucha dispersión. Es importante, tener en cuenta que el domingo tiene valores de dos días distintos (el 29 de nov y el día 6 de dic, esto está podiendo distorsionar el gráfico), ocurre algo similar el Sábado. 
+```{r}
+boxplot(gijon_lastWeek$O3~gijon_lastWeek$day, xlab="Días de la semana", ylab="O3")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6. Esto explica la divergencia del domingo ya que junta los datos del día 6 con los del 29. En el sabado también se han generado outliers. 
+```
+```{r}
+boxplot(gijon_lastWeek$O3~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="O3")
+```
+Este gráfico por días confirma la disparidad y la evolución, día por día esta Variable Aumenta. 
+```{r}
+boxplot(gijon_lastWeek$O3~gijon_lastWeek$EstacionID, xlab="Estaciones", ylab="O3")
+```
+El boxplot por estación vemos que no hay outliers y mas o menos son parecidos. Confirma lo que hemos visto en el cuadro de medias y Sd por estación.
+```{r}
+gijon_lastWeek %>% select(EstacionID,EstacionName) %>% group_by(EstacionID,EstacionName) %>% count()
+```
+
+
+#### Comparativa de las medias de cada Estación de la variable O3:
+
+```{r}
+summary(Constitucion$O3)
+summary(Argentina$O3)
+summary(Felgueroso$O3)
+summary(Castilla$O3)
+summary(Montevil$O3)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+# Histogramas: 
+hist(Constitucion$O3)
+hist(Argentina$O3)
+hist(Felgueroso$O3)
+hist(Castilla$O3)
+hist(Montevil$O3)
+```
+```{r}
+plot(density(Constitucion$O3))
+plot(density(Argentina$O3))
+plot(density(Felgueroso$O3))
+plot(density(Castilla$O3))
+plot(density(Montevil$O3))
+
+```
+
+
+
+```{r}
+# Q-Q Plot: 
+{qqnorm(Constitucion$O3, col = "gray50", main = 'Constitucion')
+qqline(Constitucion$O3)}
+{qqnorm(Argentina$O3, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$O3)}
+{qqnorm(Felgueroso$O3, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso$O3)}
+{qqnorm(Castilla$O3, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$O3)}
+{qqnorm(Montevil$O3, pch = 19, col = "gray50", main = 'Montevil')
+qqline(Montevil$O3)}
+
+```
+El análisis gráfico por estación vemos que se aproximan a una normal pero lo tenemos que confirmar con los test de hipotesis. 
+
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Constitucion$O3)
+rp.outlier(Argentina$O3)
+rp.outlier(Felgueroso$O3)
+rp.outlier(Castilla$O3)
+rp.outlier(Montevil$O3)
+```
+En este caso no hay outliers como con la anterior variable. No generamos nuevos Df. 
+
+Test de Normalidad
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+# Costitución
+ks.test(x = Constitucion$O3, 'pnorm', mean(Constitucion$O3),sd(Constitucion$O3))
+# Argentina
+ks.test(x = Argentina$O3, 'pnorm', mean(Argentina$O3),sd(Argentina$O3))
+# Felgueroso
+ks.test(x = Felgueroso$O3, 'pnorm', mean(Felgueroso$O3),sd(Felgueroso$O3))
+# Castilla
+ks.test(x = Castilla$O3, 'pnorm', mean(Castilla$O3),sd(Castilla$O3))
+# Montevil
+ks.test(x = Montevil$O3, 'pnorm', mean(Montevil$O3),sd(Montevil$O3))
+```
+Vemos como Constitución, Argentina y Felgueroso no aceptan la hipotesis nula de normalidad. Castilla y Montevil si que se adecuan a una normal aunque por muy poco. 
+
+Teste homogeneidad de la Varianza de Bartlet
+```{r}
+bartlett.test(list(Constitucion$O3, Argentina$O3,Felgueroso$O3,Castilla$O3,Montevil$O3))
+```
+Las varianzas son significativamente homogeneas, el P-valor es mayor de 0,05 por tanto aceptamos la hipotesis nula. 
+
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de O3 
+Gijon_O3 <- bind_rows(Constitucion,Argentina,Felgueroso,Castilla,Montevil)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_O3 <- aov(Gijon_O3$O3 ~ Gijon_O3$EstacionName)
+summary(anova_O3)
+plot(anova_O3)
+```
+El Pr (>F) es mayor que 0,05 podemos afirmar que hay las medias sonsignificativamente parecidas en la Variable O3
+Confirmamos esto con los pares a través de la función Tukey
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_O3)
+plot(TukeyHSD(anova_O3))
+```
+##### Variable NO:
+Con esta variable tienen datos todas las estaciones. Comparamos entre todas. Hay que tener en cuenta que los datos de la estación santa Barbara son del año 2015. 
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(NO), sd(NO))
+```
+
+Hay estaciones que tienen datos parecidos entre si. Por un lado, Argentina y Montevil tienen medias y Sd similares. Ocurre algo similar con las estaciones de Constitución y Hermanos Felgueroso. Finalmente Castilla está en "tierra de nadie" entre los dos grupos nombrados anteriormente y , por último, Santa Bárbara que presenta datos muy elevados en comparación con el resto. Veremos como lo ajustamos.  
+
+Adicionalmente, añadir que las medias son relativamente bajas en comparación a la desviación típica, esto indica que hay mucha dispersión y puede que haya muchos outliers. 
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = NO), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+De los gráficos anteriores vemos varias cosas, hay dos picos entodas las estaciones sobre las horas 7 - 12 de la mañana y 16 - 22 horas de la tarde. Santa Barbara sigue una distribución mucho mñas irregular que el resto. 
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = NO, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+Según el día de la semana, parece que los picos nombrados anteriormente son más pronunciados los días lunes, martes y miercoles. Estos picos posiblemente los tendremos que eliminar porque nos desvirtuarán la muestra. Como hemos en el cuadro de la media la dispersión es alta, ya que hay máximos de mas de 50 cuando la media ronda el 10 en todos los casos. 
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$NO~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="NO")
+```
+
+```{r}
+boxplot(gijon_lastWeek$NO~gijon_lastWeek$day, xlab="Días de la semana", ylab="NO")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6. Esto explica la divergencia del domingo ya que junta los datos del día 6 con los del 29. En el sabado también se han generado outliers. 
+```
+
+```{r}
+boxplot(gijon_lastWeek$NO~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="NO")
+```
+
+```{r}
+boxplot(gijon_lastWeek$NO~gijon_lastWeek$EstacionID, xlab="Estaciones", ylab="NO")
+```
+De los boxplot podemos deducir que independientemente de la forma de mirar el gráfico hay multiples Ouliers tanto por días como por estación. 
+
+#### Comparativa de las medias de cada Estación de la variable NO:
+
+```{r}
+summary(Constitucion$NO)
+summary(Argentina$NO)
+summary(Felgueroso$NO)
+summary(Castilla$NO)
+summary(Montevil$NO)
+summary(Santa_Bárbara$NO)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+# Histogramas: 
+hist(Constitucion$NO)
+hist(Argentina$NO)
+hist(Felgueroso$NO)
+hist(Castilla$NO)
+hist(Montevil$NO)
+hist(Santa_Bárbara$NO)
+```
+
+```{r}
+plot(density(Constitucion$NO))
+plot(density(Argentina$NO))
+plot(density(Felgueroso$NO))
+plot(density(Castilla$NO))
+plot(density(Montevil$NO))
+plot(density(Santa_Bárbara$NO))
+```
+
+
+
+```{r}
+# Q-Q Plot: 
+{qqnorm(Constitucion$NO, col = "gray50", main = 'Constitucion')
+qqline(Constitucion$NO)}
+{qqnorm(Argentina$NO, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$NO)}
+{qqnorm(Felgueroso$NO, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso$NO)}
+{qqnorm(Castilla$NO, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$NO)}
+{qqnorm(Montevil$NO, pch = 19, col = "gray50", main = 'Montevil')
+qqline(Montevil$NO)}
+{qqnorm(Santa_Bárbara$NO, pch = 19, col = "gray50", main = 'Santa_Bárbara')
+qqline(Santa_Bárbara$NO)}
+```
+Los historgamas y la distribución de densidad muestran cosas que se asemejan a una Normal pero los ouliers desvirtuan su aproximación a la qq line del qq plot. 
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Constitucion$NO)
+rp.outlier(Argentina$NO)
+rp.outlier(Felgueroso$NO)
+rp.outlier(Castilla$NO)
+rp.outlier(Montevil$NO)
+rp.outlier(Santa_Bárbara$NO)
+```
+Nos muestrar en todas las variables elementos Outliers, probalbmente hay que reducir mucho las muestras. Lo que voy a ahcer es eliminar los outliers y luego revisar que no se reducen mucho las muestras. 
+
+```{r}
+# Eliminación de Outliers
+# Voy a generar las muestras de NO sin los Outliers que propone la función: 
+Constitucion_NO <- Constitucion  %>% filter(NO < 96)
+Argentina_NO <- Argentina  %>% filter(NO < 75)
+Felgueroso_NO <- Felgueroso  %>% filter(NO < 82)
+Castilla_NO <- Castilla  %>% filter(NO < 72)
+Montevil_NO <- Montevil  %>% filter(NO < 67)
+Santa_Barbara_NO <- Santa_Bárbara  %>% filter(NO < 172)
+# Comprobación de los Ouliers: 
+rp.outlier(Constitucion_NO$NO)
+rp.outlier(Argentina_NO$NO)
+rp.outlier(Felgueroso_NO$NO)
+rp.outlier(Castilla_NO$NO)
+rp.outlier(Montevil_NO$NO)
+rp.outlier(Santa_Barbara_NO$NO)
+```
+
+```{r}
+# Hago una nueva reeliminación:
+Constitucion_NO <- Constitucion  %>% filter(NO < 31)
+Argentina_NO <- Argentina  %>% filter(NO < 16)
+Felgueroso_NO <- Felgueroso  %>% filter(NO < 68)
+Castilla_NO <- Castilla  %>% filter(NO < 54)
+Montevil_NO <- Montevil  %>% filter(NO < 9)
+Santa_Barbara_NO <- Santa_Bárbara  %>% filter(NO < 133)
+
+```
+Hemos eliminado todos los Outliers. He tenido que hacer varias eliminaciones hasta que quedarán los ouliers a 0.
+
+```{r}
+boxplot(Constitucion_NO$NO)
+boxplot(Argentina_NO$NO)
+boxplot(Felgueroso_NO$NO)
+boxplot(Castilla_NO$NO)
+boxplot(Montevil_NO$NO)
+boxplot(Santa_Barbara_NO$NO)
+```
+En el Boxplot todavía salen algunos outliers aunque con la formula no aparezca ya ninguno. 
+
+```{r}
+# Tamaño de las muestras: 
+length(Constitucion_NO$NO)
+length(Argentina_NO$NO)
+length(Felgueroso_NO$NO)
+length(Castilla_NO$NO)
+length(Montevil_NO$NO)
+length(Santa_Barbara_NO$NO)
+```
+Todas las muestras tienen un tamaño bastante grande. 
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+# Costitución
+ks.test(x = Constitucion_NO$NO, 'pnorm', mean(Constitucion_NO$NO),sd(Constitucion_NO$NO))
+# Argentina
+ks.test(x = Argentina_NO$NO, 'pnorm', mean(Argentina_NO$NO),sd(Argentina_NO$NO))
+# Felgueroso
+ks.test(x = Felgueroso_NO$NO, 'pnorm', mean(Felgueroso_NO$NO),sd(Felgueroso_NO$NO))
+# Castilla
+ks.test(x = Castilla_NO$NO, 'pnorm', mean(Castilla_NO$NO),sd(Castilla_NO$NO))
+# Montevil
+ks.test(x = Montevil_NO$NO, 'pnorm', mean(Montevil_NO$NO),sd(Montevil_NO$NO))
+# Santa Barbara
+ks.test(x = Santa_Barbara_NO$NO, 'pnorm', mean(Santa_Barbara_NO$NO),sd(Santa_Barbara_NO$NO))
+
+```
+Ninguna de las muestras tiene un pvalor superior a 0,05 por tanto podemos asumir que no siguen una distribución normal. 
+
+Teste homogeneidad de la Varianza de Bartlet
+```{r}
+bartlett.test(list(Constitucion_NO$NO, Argentina_NO$NO,Felgueroso_NO$NO,Castilla_NO$NO,Montevil_NO$NO, Santa_Barbara_NO$NO))
+```
+Rechazamos la hipotesis nula de homogeneidad de las varianzas. 
+
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de NO 
+Gijon_NO <- bind_rows(Constitucion_NO,Argentina_NO,Felgueroso_NO,Castilla_NO,Montevil_NO,Santa_Barbara_NO)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_NO <- aov(Gijon_NO$NO ~ Gijon_NO$EstacionName)
+summary(anova_NO)
+plot(anova_NO)
+```
+
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_NO)
+plot(TukeyHSD(anova_NO))
+```
+Como conclusiones de la variable NO podemos afirmar que:
+* Estacion Montevil: Tiene medias estadisticamente similares con la estación de Avda. Argentina y Avda. Constitución. 
+* Estacion Castilla:  Tiene medias estadisticamente similares con la estación de Avda. Hnos. Felgueroso y Avda. Constitución.
+* Estacion Constitución :  Tiene medias estadisticamente similares con la estación de Avda. Argentina, Avda. Castilla y avda. Montevil. Destacar en este punto como con respecto a Avda. Hnos. Felgueroso ambos tienen medias en torno a 14 y sin embargo el test, estadisticamente ha determinado que no tienen medias similares. 
+* Estacion Hnos. Felgueroso: Tiene medias estadisticamente similares con la estación de Avda. Castilla.
+* Estacion Argentina: Tiene medias estadisticamente similares con la estación de Avda. Montevil y Avda. Constitución.
+* Estacion Santa Barbara: Es la unica que no aproxima la media a ninguna de las otras muestras. 
+
+##### Variable NO2:
+Con esta variable tienen datos todas las estaciones. Comparamos entre todas. Hay que tener en cuenta que los datos de la estación santa Barbara son del año 2015. 
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(NO2), sd(NO2))
+```
+Lo primero que sorprende de los resultados es que las estaciones de Avda Argentina y Castilla con iguales aunque difieren en la desviación típica. Respecto al resto no se ven grandes diferencias. La media más alta la tiene Hnos. Felgueroso y la estación de Santa Barbara destaca por tener la deviación típica más baja. 
+
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = NO2), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = NO2, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+Se aprecian diferentes picos a lo largo de las horas pero es en general bastante disperso en todos los dias. 
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$NO2~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="NO2")
+```
+
+```{r}
+boxplot(gijon_lastWeek$NO2~gijon_lastWeek$day, xlab="Días de la semana", ylab="NO2")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6. Esto explica la divergencia del domingo ya que junta los datos del día 6 con los del 29. En el sabado también se han generado outliers. 
+```
+```{r}
+boxplot(gijon_lastWeek$NO2~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="NO2")
+```
+
+```{r}
+boxplot(gijon_lastWeek$NO2~gijon_lastWeek$EstacionID, xlab="Estaciones", ylab="NO2")
+```
+Por días y dias a la semana si que aparecen diferentes autliers debido a la mezcla que se genera al juntar las estaciones. Si se miran los boxpolot por estaciones apenas aparecen outliers. 
+
+#### Comparativa de las medias de cada Estación de la variable NO2:
+
+```{r}
+summary(Constitucion$NO2)
+summary(Argentina$NO2)
+summary(Felgueroso$NO2)
+summary(Castilla$NO2)
+summary(Montevil$NO2)
+summary(Santa_Bárbara$NO2)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+# Histogramas: 
+hist(Constitucion$NO2)
+hist(Argentina$NO2)
+hist(Felgueroso$NO2)
+hist(Castilla$NO2)
+hist(Montevil$NO2)
+hist(Santa_Bárbara$NO2)
+```
+
+```{r}
+plot(density(Constitucion$NO2))
+plot(density(Argentina$NO2))
+plot(density(Felgueroso$NO2))
+plot(density(Castilla$NO2))
+plot(density(Montevil$NO2))
+plot(density(Santa_Bárbara$NO2))
+```
+
+
+
+```{r}
+# Q-Q Plot: 
+{qqnorm(Constitucion$NO2, col = "gray50", main = 'Constitucion')
+qqline(Constitucion$NO2)}
+{qqnorm(Argentina$NO2, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$NO2)}
+{qqnorm(Felgueroso$NO2, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso$NO2)}
+{qqnorm(Castilla$NO2, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$NO2)}
+{qqnorm(Montevil$NO2, pch = 19, col = "gray50", main = 'Montevil')
+qqline(Montevil$NO2)}
+{qqnorm(Santa_Bárbara$NO2, pch = 19, col = "gray50", main = 'Santa_Bárbara')
+qqline(Santa_Bárbara$NO2)}
+```
+Las distribuciones tanto de los histogramas como de el plot de densidad muestran lo que parece aproximarse a una diustribución normal. El qq plot parece que lo confirma. 
+
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Constitucion$NO2)
+rp.outlier(Argentina$NO2)
+rp.outlier(Felgueroso$NO2)
+rp.outlier(Castilla$NO2)
+rp.outlier(Montevil$NO2)
+rp.outlier(Santa_Bárbara$NO2)
+```
+
+
+```{r}
+boxplot(Constitucion$NO2)
+boxplot(Argentina$NO2)
+boxplot(Felgueroso$NO2)
+boxplot(Castilla$NO2)
+boxplot(Montevil$NO2)
+boxplot(Santa_Bárbara$NO2)
+```
+No salen Outliers con la formula pero si que aparecen en el Boxplot  de Contitución y Castilla. Los voy a eliminar, son los máximos que hemos visto un poco mas arriba, valor 69 y 54 respectivamente. 
+```{r}
+# Creo las muestras de NO2 eliminando los ouliers en Constitucion y Castilla
+Constitucion_NO2 <- Constitucion  %>% filter(NO2 < 69)
+Argentina_NO2 <- Argentina
+Felgueroso_NO2 <- Felgueroso
+Castilla_NO2 <- Castilla  %>% filter(NO2 < 54)
+Montevil_NO2 <- Montevil
+Santa_Barbara_NO2 <- Santa_Bárbara 
+```
+
+
+```{r}
+# Tamaño de las muestras: 
+length(Constitucion_NO2$NO2)
+length(Argentina_NO2$NO2)
+length(Felgueroso_NO2$NO2)
+length(Castilla_NO2$NO2)
+length(Montevil_NO2$NO2)
+length(Santa_Barbara_NO2$NO2)
+```
+Todas las muestras tienen un tamaño bastante grande. 
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+# Costitución
+ks.test(x = Constitucion_NO2$NO2, 'pnorm', mean(Constitucion_NO2$NO2),sd(Constitucion_NO2$NO2))
+# Argentina
+ks.test(x = Argentina_NO2$NO2, 'pnorm', mean(Argentina_NO2$NO2),sd(Argentina_NO2$NO2))
+# Felgueroso
+ks.test(x = Felgueroso_NO2$NO2, 'pnorm', mean(Felgueroso_NO2$NO2),sd(Felgueroso_NO2$NO2))
+# Castilla
+ks.test(x = Castilla_NO2$NO2, 'pnorm', mean(Castilla_NO2$NO2),sd(Castilla_NO2$NO2))
+# Montevil
+ks.test(x = Montevil_NO2$NO2, 'pnorm', mean(Montevil_NO2$NO2),sd(Montevil_NO2$NO2))
+# Santa Barbara
+ks.test(x = Santa_Barbara_NO2$NO2, 'pnorm', mean(Santa_Barbara_NO2$NO2),sd(Santa_Barbara_NO2$NO2))
+
+```
+Hay disparidad en cuanto al resultado de los test. Constitucion, Felgueroso y Santa Barbara. El resto de estaciones, no aceptan la hipotesis nula de normalidad pero se aproximan bastante. 
+
+Teste homogeneidad de la Varianza de Bartlet
+```{r}
+bartlett.test(list(Constitucion_NO2$NO2, Argentina_NO2$NO2,Felgueroso_NO2$NO2,Castilla_NO2$NO2,Montevil_NO2$NO2, Santa_Barbara_NO2$NO2))
+```
+Rechazamos la hipotesis nula de homogeneidad de las varianzas. 
+
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de NO 
+Gijon_NO2 <- bind_rows(Constitucion_NO2,Argentina_NO2,Felgueroso_NO2,Castilla_NO2,Montevil_NO2,Santa_Barbara_NO2)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_NO2 <- aov(Gijon_NO2$NO2 ~ Gijon_NO2$EstacionName)
+summary(anova_NO2)
+plot(anova_NO2)
+```
+Vemos como al menos dos o más muestras no tienen medias estadisticamente similares. 
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_NO2)
+plot(TukeyHSD(anova_NO2))
+```
+Como conclusiones de la variable NO2 podemos afirmar que:
+* Estacion Montevil: Tiene medias estadisticamente similares con la estación de Avda. Argentina, Avda. Castilla, Avda. Constitucion y Santa Barbara.
+* Estacion Castilla:  Tiene medias estadisticamente similares con la estación de Avda. Argentina, Avda. Constitución y Avda. Montevil.
+* Estacion Constitución :  Tiene medias estadisticamente similares con la estación de Avda. Argentina, Avda. Castilla, avda. Montevil y Avda. Santa Barbara. 
+* Estacion Hnos. Felgueroso: Es la unica que estadisticamente no se asemeja a ninguna media de las otras muestras. 
+* Estacion Argentina: Tiene medias estadisticamente similares con la estación de Avda. Montevil, Avda. Castilla y Constitución. 
+* Estacion Santa Barbara: Es similiar a Constitucion y Montevil.
+
+
+##### Variable CO:
+Esta variable solamente la tienen la Estación ARgentina, Estaci´on Castilla y Estación Santa Barbara
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(CO), sd(CO))
+```
+Los datos son bastante dispares en cuanto a media y desviaciones típicas. Avenida Castilla y Santa Barbara tienen medias similares pero Santa Bárbara tiene una desviación tipica superior. Lo que muestra una grán dispersión. 
+
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = CO), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = CO, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+En Argentina y Castilla se observan valores bastantes compactos, sin mucha dispersión (algo más en argentina) frente a Santa Bárbara que si que tiene picos muy elevados. 
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$CO~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="CO")
+```
+
+```{r}
+boxplot(gijon_lastWeek$CO~gijon_lastWeek$day, xlab="Días de la semana", ylab="CO")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6. Esto explica la divergencia del domingo ya que junta los datos del día 6 con los del 29. En el sabado también se han generado outliers. 
+```
+```{r}
+boxplot(gijon_lastWeek$CO~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="CO")
+```
+
+
+```{r}
+boxplot(gijon_lastWeek$CO~gijon_lastWeek$EstacionID, xlab="Estaciones", ylab="CO")
+```
+Tanto por días como por estación hay valores atipicos. 
+
+#### Comparativa de las medias de cada Estación de la variable CO:
+
+```{r}
+summary(Argentina$CO)
+summary(Castilla$CO)
+summary(Santa_Bárbara$CO)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+# Histogramas: 
+hist(Argentina$CO)
+hist(Castilla$CO)
+hist(Santa_Bárbara$CO)
+```
+
+```{r}
+plot(density(Argentina$CO))
+plot(density(Castilla$CO))
+plot(density(Santa_Bárbara$CO))
+```
+
+
+
+```{r}
+# Q-Q Plot: 
+{qqnorm(Argentina$CO, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$CO)}
+{qqnorm(Castilla$CO, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$CO)}
+{qqnorm(Santa_Bárbara$CO, pch = 19, col = "gray50", main = 'Santa_Bárbara')
+qqline(Santa_Bárbara$CO)}
+```
+En los tres gráficos anteriores vemos que las distribuciones de las tres muestras podrian aproximarse a una normal pero los valores atipicos distorsionan esa distribución. 
+
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Argentina$CO)
+rp.outlier(Castilla$CO)
+rp.outlier(Santa_Bárbara$CO)
+```
+Según la formula no salen valores outliers en Castilla. Los elimina "manualmente"
+
+```{r}
+boxplot(Argentina$CO)
+boxplot(Castilla$CO)
+boxplot(Santa_Bárbara$CO)
+```
+No salen Outliers con la formula pero si que aparecen en el Boxplot, como hemos visto antes. Los voy a eliminar "manualmente". 
+En Argentina voy a eliminar los valores a partir de 0.5
+En Castilla elimino 0.15 por abajo y 0.58 por arriba. 
+En Santa Barbara a partir de 1. 
+
+```{r}
+summary(Argentina$CO)
+summary(Castilla$CO)
+summary(Santa_Bárbara$CO)
+```
+
+```{r}
+# Creo las muestras de NO2 eliminando los ouliers en Constitucion y Castilla
+Argentina_CO <- Argentina  %>% filter(CO < 0.5)
+Castilla_CO <- Castilla  %>% filter(CO < 0.58 & CO > 0.15 )
+Santa_Barbara_CO <- Santa_Bárbara %>% filter(CO < 1)
+```
+
+```{r}
+boxplot(Argentina_CO$CO)
+boxplot(Castilla_CO$CO)
+boxplot(Santa_Barbara_CO$CO)
+```
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Argentina_CO$CO)
+rp.outlier(Castilla_CO$CO)
+rp.outlier(Santa_Barbara_CO$CO)
+```
+
+
+```{r}
+# Tamaño de las muestras: 
+length(Argentina_CO$CO)
+length(Castilla_CO$CO)
+length(Santa_Barbara_CO$CO)
+```
+Todas las muestras tienen un tamaño bastante grande. Y auqnue sigue habiendo ouliers en el Boxplot con la fomrula ya no salen. 
+
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+
+# Argentina
+ks.test(x = Argentina_CO$CO, 'pnorm', mean(Argentina_CO$CO),sd(Argentina_CO$CO))
+
+# Castilla
+ks.test(x = Castilla_CO$CO, 'pnorm', mean(Castilla_CO$CO),sd(Castilla_CO$CO))
+
+# Santa Barbara
+ks.test(x = Santa_Barbara_CO$CO, 'pnorm', mean(Santa_Barbara_CO$CO),sd(Santa_Barbara_CO$CO))
+
+```
+La unica muestra que acepta la hipotesis nula de normalidad es la estación de Castilla. 
+
+Teste homogeneidad de la Varianza de Bartlet
+```{r}
+bartlett.test(list(Castilla_CO$CO, Santa_Barbara_CO$CO,Argentina_CO$CO))
+```
+Rechazamos la hipotesis nula de homogeneidad de las varianzas. 
+
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de NO 
+Gijon_CO <- bind_rows(Argentina_CO,Castilla_CO,Santa_Barbara_CO)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_CO <- aov(Gijon_CO$CO ~ Gijon_CO$EstacionName)
+summary(anova_CO)
+plot(anova_CO)
+```
+Vemos como al menos dos o más muestras no tienen medias estadisticamente similares. 
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_CO)
+plot(TukeyHSD(anova_CO))
+```
+Ninguna de las tres muestras tiene medias estadisticamente similares. 
+
+##### Variable PM10:
+Esta variable se puede comparar entre todas las estaciones menos con Montevl
+```{r}
+# Comparación de Medias: 
+gijon_lastWeek %>% group_by(EstacionName) %>% summarise(mean(PM10), sd(PM10))
+```
+Hay diferencias entre las estaciones, aparentemente no hay mucha igualdad ni en media ni en desviación Tipica. Aunque hay alguna excepción por ejemplo las estaciones de castilla y hnos Felgueroso tienen medias muy similares pero desviaciones típicas dispares. 
+
+```{r}
+# Visualización de los datos: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = PM10), color = "darkgreen") +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+```{r}
+# Vamos a ver por días como evoluciona: 
+ggplot(data = gijon_lastWeek) +
+  geom_point(aes(x = Periodo, y = PM10, color = wday_letra,)) +
+  facet_wrap(~ EstacionName, nrow = 2)
+```
+En Argentina y Castilla se observan valores bastantes compactos, sin mucha dispersión (algo más en argentina) frente a Santa Bárbara que si que tiene picos muy elevados. 
+```{r}
+# Hacemos un Box Plot para ver por días esas diferencias. 
+boxplot(gijon_lastWeek$PM10~gijon_lastWeek$wday_letra, xlab="Días de la semana", ylab="PM10")
+```
+
+```{r}
+boxplot(gijon_lastWeek$PM10~gijon_lastWeek$day, xlab="Días de la semana", ylab="PM10")
+# vemos como hay datos de otros días no solo de la última semana, van desde el 28 de nov al 6. Esto explica la divergencia del domingo ya que junta los datos del día 6 con los del 29. En el sabado también se han generado outliers. 
+```
+
+```{r}
+boxplot(gijon_lastWeek$PM10~gijon_lastWeek$Fecha_Hora, xlab="Días de la semana", ylab="PM10")
+```
+
+```{r}
+boxplot(gijon_lastWeek$PM10~gijon_lastWeek$EstacionID, xlab="Estaciones", ylab="PM10")
+```
+Tanto por días como por estación hay valores atipicos. solamente por arriba. Destacar como los valores atipicos son mucho más normales en los boxplot de días que en los de estaciones. 
+
+#### Comparativa de las medias de cada Estación de la variable PM10:
+
+```{r}
+summary(Constitucion$PM10)
+summary(Argentina$PM10)
+summary(Felgueroso$PM10)
+summary(Castilla$PM10)
+summary(Santa_Bárbara$PM10)
+```
+
+Análisis gráfico de cada una: 
+```{r}
+# Histogramas:
+hist(Constitucion$PM10)
+hist(Argentina$PM10)
+hist(Felgueroso$PM10)
+hist(Castilla$PM10)
+hist(Santa_Bárbara$PM10)
+```
+
+```{r}
+plot(density(Constitucion$PM10))
+plot(density(Argentina$PM10))
+plot(density(Felgueroso$PM10))
+plot(density(Castilla$PM10))
+plot(density(Santa_Bárbara$PM10))
+```
+
+
+
+```{r}
+# Q-Q Plot: 
+{qqnorm(Constitucion$PM10, pch = 19, col = "gray50", main = 'Constitucion')
+qqline(Constitucion$PM10)}
+{qqnorm(Argentina$PM10, pch = 19, col = "gray50", main = 'Argentina')
+qqline(Argentina$PM10)}
+{qqnorm(Felgueroso$PM10, pch = 19, col = "gray50", main = 'Felgueroso')
+qqline(Felgueroso$PM10)}
+{qqnorm(Castilla$PM10, pch = 19, col = "gray50", main = 'Castilla')
+qqline(Castilla$PM10)}
+{qqnorm(Santa_Bárbara$PM10, pch = 19, col = "gray50", main = 'Santa_Bárbara')
+qqline(Santa_Bárbara$PM10)}
+```
+En los tres gráficos anteriores vemos que las distribuciones de las tres muestras podrian aproximarse a una normal pero los valores atipicos distorsionan esa distribución. 
+
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Constitucion$PM10)
+rp.outlier(Argentina$PM10)
+rp.outlier(Felgueroso$PM10)
+rp.outlier(Castilla$PM10)
+rp.outlier(Santa_Bárbara$PM10)
+```
+Si que salen valores atipicos, los vamos a eliminar. En santa Barbara no salen atipicos con la formula. 
+
+```{r}
+# Creo las muestras de PM10 eliminando los ouliers en Constitucion y Castilla
+Constitucion_PM10 <- Constitucion  %>% filter(PM10 < 71)
+Argentina_PM10 <- Argentina  %>% filter(PM10 < 94)
+Felgueroso_PM10 <- Felgueroso  %>% filter(PM10 < 67)
+Castilla_PM10 <- Castilla  %>% filter(PM10 < 48)
+Santa_Barbara_PM10 <- Santa_Bárbara 
+```
+
+```{r}
+boxplot(Constitucion_PM10$PM10)
+boxplot(Argentina_PM10$PM10)
+boxplot(Felgueroso_PM10$PM10)
+boxplot(Castilla_PM10$PM10)
+boxplot(Santa_Barbara_PM10$PM10)
+```
+```{r}
+# Comprobación de los Outliers: 
+rp.outlier(Constitucion_PM10$PM10)
+rp.outlier(Argentina_PM10$PM10)
+rp.outlier(Felgueroso_PM10$PM10)
+rp.outlier(Castilla_PM10$PM10)
+rp.outlier(Santa_Barbara_PM10$PM10)
+```
+
+
+```{r}
+# Tamaño de las muestras: 
+length(Constitucion_PM10$PM10)
+length(Argentina_PM10$PM10)
+length(Felgueroso_PM10$PM10)     
+length(Castilla_PM10$PM10)
+length(Santa_Barbara_PM10$PM10)
+```
+Todas las muestras tienen un tamaño bastante grande. Y auqnue sigue habiendo ouliers en el Boxplot con la fomrula ya no salen. 
+
+```{r}
+# El test de normalidad tiene que ser Kolmogorov Smirnov y Anderson Darling ya que son muestras grandes. Por tanto no encaja en este caso el Shapiro Test.
+# Constitucion
+ks.test(x = Constitucion_PM10$PM10, 'pnorm', mean(Constitucion_PM10$PM10),sd(Constitucion_PM10$PM10))
+# Argentina
+ks.test(x = Argentina_PM10$PM10, 'pnorm', mean(Argentina_PM10$PM10),sd(Argentina_PM10$PM10))
+# Felgueroso
+ks.test(x = Felgueroso_PM10$PM10, 'pnorm', mean(Felgueroso_PM10$PM10),sd(Felgueroso_PM10$PM10))
+# Castilla
+ks.test(x = Castilla_PM10$PM10, 'pnorm', mean(Castilla_PM10$PM10),sd(Castilla_PM10$PM10))
+# Santa Barbara
+ks.test(x = Santa_Barbara_PM10$PM10, 'pnorm', mean(Santa_Barbara_PM10$PM10),sd(Santa_Barbara_PM10$PM10))
+
+```
+Ninguna de las muestras aceptan la hipotesis nula de que se distribuyen como una normal. 
+
+Teste homogeneidad de la Varianza de Bartlet
+```{r}
+bartlett.test(list(Constitucion_PM10$PM10,Argentina_PM10$PM10,Felgueroso_PM10$PM10, Castilla_PM10$PM10,Santa_Barbara_PM10$PM10) )
+```
+Rechazamos la hipotesis nula de homogeneidad de las varianzas. 
+
+```{r}
+# Para hacer el ANOVA hago un DF con los datos de NO 
+Gijon_PM10 <- bind_rows(Constitucion_PM10,Argentina_PM10,Felgueroso_PM10, Castilla_PM10,Santa_Barbara_PM10)
+
+# Finalmente aplicariamos el Test ANOVA asumiendo que no se dan las consideraciones más propicias para que el análisis sea exacto: 
+anova_PM10 <- aov(Gijon_PM10$PM10 ~ Gijon_PM10$EstacionName)
+summary(anova_PM10)
+plot(anova_PM10)
+```
+Vemos como al menos dos o más muestras no tienen medias estadisticamente similares. 
+```{r}
+# Con la función TukeyHSD podemos comparar las medias en pares:
+TukeyHSD(anova_PM10)
+plot(TukeyHSD(anova_PM10))
+```
+Solamente tienen medias estadisticamente similares Santa Barbara y Avenida Argentina, y Hnos. Felgueroso y Avda. Castilla.
+
+### Mapa de las estaciones:
+```{r}
+# Creo un DF con la longitud y la latitud de las estaciones
+Estaciones <- gijon_lastWeek %>% select(EstacionName,Lat,Lon)
+Estaciones <- Estaciones[!duplicated(Estaciones)]
+map <- leaflet(Estaciones) %>% 
+  addTiles() %>%  # Añade por defecto los Tiles de  OpenStreetMap
+  addMarkers(lng= ~Lon, lat=~Lat, popup=~EstacionName) 
+map  # Imprime el mapa
+```
+
+## CONCLUSIONES   
+El DF contiene datos de la contaminación de la ciudad de Gijón, así como datos meteorológicos. Lo que hemos hecho es comparar por estación las diferentes varables y determinar si son o no estadisticamente similares. Hay que tener en cuenta que no todas las estaciones tienen datos de todas las variables, por tanto está un poco sesgado el estudio. Finalmente hemos comparado: SO2, O3, NO, NO2, CO y PM10.  
+En función a estas variables se puede concluir que: 
+* Las estaciones más parecidas son Estación Constitución y Estación Argentina. Tienen medias estadisticamente similares en las variables O3, SO2, NO, NO2. 
+* Felgueroso y Santaa Barbara son las estaciones más alejadas del resto. En el caso de Santa Barbara tiene sentido ya que los valores 
+* La Variable O3 es similar en todas las variables, en contrapunto a CO que estadisticamente no tiene medias similares. 
+
+
+
+
