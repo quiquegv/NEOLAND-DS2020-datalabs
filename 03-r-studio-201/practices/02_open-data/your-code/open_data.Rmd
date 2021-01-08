@@ -1341,10 +1341,11 @@ map  # Imprime el mapa
 ```
 
 ## CONCLUSIONES   
-El DF contiene datos de la contaminación de la ciudad de Gijón, así como datos meteorológicos. Lo que hemos hecho es comparar por estación las diferentes varables y determinar si son o no estadisticamente similares. Hay que tener en cuenta que no todas las estaciones tienen datos de todas las variables, por tanto está un poco sesgado el estudio. Finalmente hemos comparado: SO2, O3, NO, NO2, CO y PM10.  
+El DF contiene datos de la contaminación de la ciudad de Gijón, así como datos meteorológicos. Lo que he hecho es comparar por estación las diferentes variables y determinar si son o no estadisticamente similares. Hay que tener en cuenta que no todas las estaciones tienen datos de todas las variables, por tanto está un poco sesgado el estudio. Finalmente hemos comparado: SO2, O3, NO, NO2, CO y PM10. También hay que tener en cuenta que en la mayoría de los casos, las variables no sequían una distribución normal, por tanto, los análisis del ANOVA realizados no son representativos pero he optado por hacerlos ya que era lo que se pedía y no conocía otra forma de comparar las medias. 
+
 En función a estas variables se puede concluir que: 
 * Las estaciones más parecidas son Estación Constitución y Estación Argentina. Tienen medias estadisticamente similares en las variables O3, SO2, NO, NO2. 
-* Felgueroso y Santaa Barbara son las estaciones más alejadas del resto. En el caso de Santa Barbara tiene sentido ya que los valores 
+* Felgueroso y Santa Barbara son las estaciones más alejadas del resto. En el caso de Santa Barbara tiene sentido ya que los valores que componenen su muestra son del año 2015. 
 * La Variable O3 es similar en todas las variables, en contrapunto a CO que estadisticamente no tiene medias similares. 
 
 
