@@ -213,7 +213,7 @@ Mostramos en un gráfica los valores de las siluetas media de cada prueba para c
 plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Numero de clusters",ylab="Silueta")
 ```
 
-Aunque el valor esperado es k=3, dado que el conjunto original tiene 3 clases, el mejor valor que se obtiene es k=2.
+Aunque el valor esperado es k=3, dado que el conjunto original tiene 3 clases, el mejor valor que se obtiene es k=2. Lo que tenemos que observar es el valor en le cual la gráfica se empieza a aplanar, es decir, donde cambia el codo. 
 
 Otro forma de evaluar cual es el mejor número de clústers es considerar el mejor modelo, aquel que ofrece la menor suma de los cuadrados de las distancias de los puntos de cada grupo con resActividad_to a su centro (withinss), con la mayor separacion entre centros de grupos (betweenss). Como se puede comprobar es una idea conceptualmente similar a la silueta. Una manera común de hacer la selección del número de clústers consiste en aplicar el método elbow (codo), que no es más que la selección del número de clústers en base a la insActividad_ción de la gráfica que se obtiene al iterar con el mismo conjunto de datos para distintos valores del número de clústers. Se seleccionará el valor que se encuentra en el "codo" de la curva
 
@@ -255,14 +255,17 @@ Como se ha comprobado, conocer el número óptimo de clústers no es un problema
 Como en el caso que estudiamos sabemos que los datos pueden ser agrupados en 3 clases, vamos a ver como se ha comportado el kmeans en el caso de pedirle 3 clústers. Para eso comparamos visualmente los campos dos a dos, con el valor real que sabemos está almacenado en el campo "class" del dataset original.
 ```{r message= FALSE, warning=FALSE}
 iris3clusters <- kmeans(x, 3)
-
+iris_data$class1[iris_data$class == 'Iris-setosa'] = 1
+iris_data$class1[iris_data$class == 'Iris-versicolor'] = 2
+iris_data$class1[iris_data$class == 'Iris-virginica'] = 3
 # sepalLength y sepalWidth
 plot(x[c(1,2)], col=iris3clusters$cluster)
-plot(x[c(1,2)], col=iris_data$class)
+plot(x[c(1,2)], col=iris_data$class1)
+
 
 # petalLength y petalWidth
 plot(x[c(3,4)], col=iris3clusters$cluster)
-plot(x[c(3,4)], col=iris_data$class)
+plot(x[c(3,4)], col=iris_data$class1)
 ```
 Podemos observar que el sépalo no es un buen indicador para diferenciar a las tres subesActividad_ies, no con la metodología de kmeans, dado que dos de las subesActividad_ies estan demasiado mezcladas para poder diferenciar nada. El tamaño del pétalo sin embargo, parece hacer un mucho mejor trabajo para dividir las tres clases de flores. El grupo formado por los puntos negros que ha encontrado el algoritmo coincide con los de la flor Iris Setosa. Los otros dos grupos sin embargo se entremezclan algo más, y hay ciertos puntos que se clasifican como Versicolor cuando en realidad son Virginica.
  
@@ -283,6 +286,124 @@ Tomando como punto de partida los ejemplos mostrados, realizar un estudio simila
 A la hora de elegir la base de datos ten en cuenta que sea apropiada para problemas no supervisados y que los atributos sean también apropiados para su uso con el algoritmo kmeans.
 
 No hay que olvidarse de la fase de preparación y análisis de datos.
+
+### Carga del dataset: 
+
+El dataset `BrainpH` nos muestra los datos del tejido cerebral al momento de la muerte de un paciente. No existen valores erróneos, nulos o vacíos. Tenemos un marco de datos con 54 observaciones sobre las siguientes 5 variables:
+- 1. pH - pH del tejido cerebral;
+- 2. Sex - F o M;
+- 3. Ethnicity - AfricanAmerican, Asian, Caucasian o PacificIslander;
+- 4. Age - Edad a la que muere;
+- 5. DeathType - Causa de muerte (Cardiac, Other o Suicide).
+
+```{r}
+df <-read.csv("https://vincentarelbundock.github.io/Rdatasets/csv/Stat2Data/BrainpH.csv", header=T, sep=",")
+```
+
+```{r}
+head(df)
+
+```
+Veo que hay una variable que es como un indice, es la variable `X` que nos vamos a cargar
+```{r}
+df_clean <- df[,2:6]
+
+summary(df_clean)
+```
+### Transformaciones deel DF
+Por ejmplo, podemos transformar las categóricas en numéricas
+
+```{r}
+library(dplyr)
+
+## Pasamos los atributos a factores numericos 1,2,3...
+
+df_clean$Sex <- factor(ifelse(df_clean$Sex == "M", 1, 2))
+df_clean$Ethnicity <- factor(ifelse(df_clean$Ethnicity == "Caucasian", 1,
+                           ifelse(df_clean$Ethnicity == "Asian", 3, 
+                                  ifelse(df_clean$Ethnicity=="AfricanAmerican",2,4))))
+df_clean$DeathType <- factor(ifelse(df_clean$DeathType == "Cardiac",1,
+                           ifelse(df_clean$DeathType == "Suicide", 3, 2)))
+
+###### 
+# Tarea pendiente: REALIZAR VISUALIZACION Y EDA
+#####
+
+## Convertimos a numericos
+
+df_clean$Sex <- as.numeric(df_clean$Sex)
+df_clean$Ethnicity <- as.numeric(df_clean$Ethnicity)
+df_clean$Age <- as.numeric(df_clean$Age)
+df_clean$DeathType <- as.numeric(df_clean$DeathType)
+
+```
+
+## Trabajamos ahora con la normalización solo con un dataset no-supervisado, eliminando así la var dependiente
+
+```{r}
+df_norm <- as.data.frame(scale(df_clean[,1:4])) # dejamos fuera la variable 
+summary(df_norm)
+```
+### Como no conocemos le número de aclúster (suponemos que sean2 o 3 por la variable Deathtype que eliminamos hace un ratit...), robamos con varias valores de 1 a...
+
+```{r}
+dt <- daisy(df_norm)
+result <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fitt <- kmeans(df_norm, i)
+  y_clustert <- fitt$cluster
+  skt <- silhouette(y_clustert, dt)
+  result[i] <-  mean(skt[,3])
+}
+
+```
+```{r}
+plot(2:10, result[2:10], type = "o", col = "blue", pch = 0, xlab = "cluster number", ylab = "silueta")
+```
+Como no es claro si es un K = 3 o un K=6, repetimos la operacion con la evaluación del mejor modelo a través del resultado que nos ofrece la suma de los cuadrados de las distancias de los puntos de cada grupo con respecto a su centro (withinss) con la mayor separacion entre centro de grupos (betweenss).
+
+Utilizamos la técnica del "codo"
+
+```{r}
+result <- rep(0,10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit <- kmeans(df_norm, i)
+  result[i] <- fit$tot.withinss
+}
+
+plot(2:10, result[2:10], type = "o", col = "blue", pch = 0, xlab = "cluster number", ylab = "tot.withniss")
+
+```
+Realizamos la ultima comprobacion con el método **silueta media** y **Calinksi-Hasrabasz**
+
+```{r}
+library(fpc)
+fit_ch_3 <- kmeansruns(df_norm, krange = 1:50, criterion = "ch")
+fit_aws_3 <- kmeansruns(df_norm, krange = 1:10, criterion = "aws")
+```
+
+
+```{r}
+fit_ch_3$bestk
+```
+```{r}
+plot(1:50,fit_ch_3$crit,type="o",col="blue",pch=0,xlab="Número de clústers",ylab="Criterio Calinski-Harabasz")
+
+```
+## Visualizamos la clasifciación
+
+```{r}
+df_clusters <- kmeans(df_norm,3)
+matriz <- table(df_clusters$cluster,df_clean$DeathType)
+matriz
+```
+```{r}
+# Calculamos la precision de esta Clasificacion de k = 3
+(matriz[1,1]+matriz[2,2]+matriz[3,3])*100/54 # 54 es el numero de observaciones. 
+```
+
 
 ### Respuesta 1.1:
 > Escribe aquí la respuesta a la pregunta

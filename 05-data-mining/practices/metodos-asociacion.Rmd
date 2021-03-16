@@ -1,0 +1,75 @@
+---
+title: "Métodos de asociación"
+author: "nombre - apellidos - NEOLAND"
+date: "12/3/2021"
+output: html_document
+---
+******
+# Ejemplo 2
+## Métodos de asociación
+******
+En este ejemplo vamos trabajar el algoritmo "apriori" para obtener reglas de asociacion a partir de un data set. Dichas reglas nos ayudarán a comprender cómo la información del data set se relaciona entre si.
+Para dicho objetivo vamos a trabajar el dataset de Groceries, que ya viene incluido con las librerias de arules.
+
+```{r message= FALSE, warning=FALSE}
+# install.packages("arules")
+library(arules)
+data("Groceries")
+```
+
+Inspeccionamos el dataset y vemos que tiene un listado de elementos que fueron comprados juntos. Vamos a analizarlo un poco visualmente.
+
+```{r message= FALSE, warning=FALSE}
+?Groceries
+inspect(head(Groceries, 5))
+```
+
+En el siguiente plot podemos ver que los tres elementos más vendidos son la leche entera, otras verduras y bollería. Dada la simplicidad del Dataset no se pueden hacer mucho más análisis. Pero para datasets más complejos miraríamos la freqüencia y distribución de todos los campos, en busca de posibles errores.
+
+```{r message= FALSE, warning=FALSE}
+itemFrequencyPlot(Groceries,topN=20,type="absolute")
+```
+
+Si lanzamos el algoritmo "apriori", generaremos directamente un set de reglas con diferente soporte, confianza y lift. El soporte indica cuantas veces se han encontrado las reglas {lsh => rhs} en el dataset, cuanto más alto mejor. La confianza habla de la probabilidad de que {rhs} se de en función de {lhs}. Y el lift es un parámetro que nos indica cuánto de aleatoriedad hay en las reglas. Un lift de 1 o menos es que las reglas son completamente fruto del azar.
+
+```{r message= FALSE, warning=FALSE}
+grocery_rules <- apriori(Groceries, parameter = list(support = 0.01, confidence = 0.5))
+
+inspect(head(sort(grocery_rules, by = "confidence"), 3))
+```
+
+Podemos probar a ordenar las reglas por los diferentes parámetros, para ver que información podemos obtener.
+
+```{r message= FALSE, warning=FALSE}
+inspect(head(sort(grocery_rules, by = "support"), 3))
+```
+
+ordenando por support vemos que, con un lift de 2 y una confianza del 51%, podemos decir que la gente que en la misma compra hacía verduras y yogurt, compraban también leche entera. Hay que tener en cuenta que la leche entera es por otro lado el elemento más vendido de la tienda.
+
+```{r message= FALSE, warning=FALSE}
+inspect(head(sort(grocery_rules, by = "lift"), 3))
+```
+
+Por otro lado, si ordenamos por lift, vemos que con un soporte del 1% y una confianza del 58%, la gente que compra cítricos y tubérculos compra tambien verduras
+
+Esta información nos puede ayudar a dar consejos a la dirección de la disposición de los elementos en la tienda o de que productos poner en oferta según lo que se ha comprado. Y si tuviéramos más información podríamos hacer análisis más profundos y ver que clientes compran exactamente qué.
+
+## Ejercicio 2.1:  
+En este ejercicio seguiréis los pasos del ciclo de vida de un proyecto de minería de datos para el caso de un algoritmo de generación de reglas de asociación. Lo haréis con el fichero Lastfm.csv que encontraréis adjunto. Este fichero contiene un conjunto de registros. Estos registros son el histórico de las canciones que ha escuchado un usuario (user) en un portal Web de música. "artist" es el nombre del grupo que ha escuchado, sex y country corresponden a variables que describen al usuario.
+
+### Respuesta 2.1:
+> Escribe aquí la respuesta a la pregunta
+
+******
+# Criterios de evaluación
+******
+
+
+## Ejercicio 2.1
+
+* 10%. Se realiza un resumen de los datos incluidos en la base de datos.
+* 15%. Se preparan los datos de forma correcta.
+* 10%. Se aplica el algoritmo de reglas de asociación.
+* 20%. Se realizan diferentes pruebas variando algunos parámetros.
+* 35%. Se explican las conclusiones que se obtienen.
+* 10%. Se presenta el código y es fácilmente reproducible.
